@@ -1,0 +1,13 @@
+[package]
+name = "diskus"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ratatui = "0.29"
+crossterm = "0.28"
+jwalk = "0.8"
+ntfs-reader = "0.4"
+
+[build-dependencies]
+winresource = "0.1"
