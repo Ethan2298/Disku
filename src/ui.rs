@@ -9,7 +9,6 @@ use crate::utils::{format_size, percent, DriveInfo};
 
 pub struct App {
     pub tree: FileNode,
-    /// Index path from root to current directory (e.g. [2, 0] = root.children[2].children[0])
     pub nav_path: Vec<usize>,
     pub list_state: ListState,
     pub sort_by_size: bool,
@@ -103,182 +102,164 @@ impl App {
     }
 }
 
-pub fn draw_scanning(f: &mut Frame, files_scanned: u64, errors: u64) {
-    let area = f.area();
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let vert = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(vert[1])[1]
+}
+
+pub fn draw_scanning(f: &mut Frame, files_scanned: u64, _errors: u64) {
+    let area = centered_rect(44, 30, f.area());
+
     let block = Block::default()
-        .title(" diskus — scanning... ")
+        .title(" disku ")
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Rgb(50, 50, 50)));
+        .border_style(Style::default().fg(Color::Rgb(70, 70, 70)));
 
-    let text = vec![
-        Line::from(""),
-        Line::from(Span::styled(
-            "  Scanning filesystem...",
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        )),
-        Line::from(""),
-        Line::from(format!("  Files scanned: {}", files_scanned)),
-        Line::from(format!("  Permission errors: {}", errors)),
-        Line::from(""),
-        Line::from(Span::styled(
-            "  Please wait...",
-            Style::default().fg(Color::DarkGray),
-        )),
-    ];
+    let inner = block.inner(area);
+    f.render_widget(block, area);
 
-    let paragraph = Paragraph::new(text).block(block);
-    f.render_widget(paragraph, area);
+    let top = inner.height.saturating_sub(4) / 2;
+    let mut lines: Vec<Line> = (0..top).map(|_| Line::from("")).collect();
+
+    let (status, status_color) = if files_scanned == 0 {
+        ("  initializing...", Color::Rgb(150, 150, 150))
+    } else {
+        ("  scanning...", Color::Rgb(100, 200, 255))
+    };
+
+    lines.push(Line::from(Span::styled(
+        status,
+        Style::default()
+            .fg(status_color)
+            .add_modifier(Modifier::BOLD),
+    )));
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        if files_scanned == 0 {
+            "  reading filesystem...".to_string()
+        } else {
+            format!("  {} files", files_scanned)
+        },
+        Style::default().fg(Color::Rgb(100, 100, 100)),
+    )));
+
+    f.render_widget(Paragraph::new(lines), inner);
 }
 
 pub fn draw(f: &mut Frame, app: &mut App) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3), // header
-            Constraint::Min(5),   // file list
-            Constraint::Length(3), // footer
-        ])
-        .split(f.area());
+    let area = centered_rect(88, 90, f.area());
 
-    draw_header(f, app, chunks[0]);
-    draw_file_list(f, app, chunks[1]);
-    draw_footer(f, chunks[2]);
-}
-
-fn draw_header(f: &mut Frame, app: &App, area: Rect) {
-    let current = app.current();
     let path_str = app.current_path();
-    let size_str = format_size(current.size);
+    let size_str = format_size(app.current().size);
+    let count = app.current().children.len();
     let sort_label = if app.sort_by_size { "size" } else { "name" };
-    let count = current.children.len();
 
-    let line = Line::from(vec![
-        Span::styled(" diskus", Style::default().fg(Color::Rgb(100, 200, 255)).add_modifier(Modifier::BOLD)),
-        Span::styled(" \u{2502} ", Style::default().fg(Color::Rgb(60, 60, 60))),
-        Span::styled(path_str.to_string(), Style::default().fg(Color::White)),
-        Span::styled("   ", Style::default()),
-        Span::styled(size_str, Style::default().fg(Color::Rgb(255, 220, 80)).add_modifier(Modifier::BOLD)),
-        Span::styled(format!("  {} items", count), Style::default().fg(Color::Rgb(120, 120, 120))),
-        Span::styled(format!("  sort:{}", sort_label), Style::default().fg(Color::Rgb(80, 80, 80))),
-    ]);
+    let title = format!(
+        " {}  {}  {} items  [{}] ",
+        path_str, size_str, count, sort_label
+    );
 
     let block = Block::default()
+        .title(Span::styled(
+            title,
+            Style::default().fg(Color::Rgb(120, 120, 120)),
+        ))
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Rgb(50, 50, 50)));
+        .border_style(Style::default().fg(Color::Rgb(70, 70, 70)));
 
-    let paragraph = Paragraph::new(line).block(block);
-    f.render_widget(paragraph, area);
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(3), Constraint::Length(1)])
+        .split(inner);
+
+    draw_file_list(f, app, chunks[0]);
+    draw_footer(f, chunks[1]);
 }
 
 fn draw_file_list(f: &mut Frame, app: &mut App, area: Rect) {
-    let visible_height = area.height.saturating_sub(2) as usize; // minus borders
+    let visible_height = area.height as usize;
     let current = app.current();
     let total_size = current.size;
     let total_children = current.children.len();
-    let bar_width = (area.width as usize).saturating_sub(6);
+    let available_width = area.width as usize;
 
-    // Only format items in the visible window (+ buffer)
     let selected = app.list_state.selected().unwrap_or(0);
     let window_start = selected.saturating_sub(visible_height);
     let window_end = (window_start + visible_height * 3).min(total_children);
 
     let items: Vec<ListItem> = current.children[window_start..window_end]
         .iter()
-        .map(|child| format_child_item(child, total_size, bar_width))
+        .map(|child| format_child_item(child, total_size, available_width))
         .collect();
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Rgb(50, 50, 50)));
+    let list = List::new(items).highlight_style(
+        Style::default()
+            .bg(Color::Rgb(35, 35, 50))
+            .add_modifier(Modifier::BOLD),
+    );
 
-    let list = List::new(items)
-        .block(block)
-        .highlight_style(
-            Style::default()
-                .bg(Color::DarkGray)
-                .add_modifier(Modifier::BOLD),
-        );
-
-    // Adjust list state to the windowed range
     let mut windowed_state = ListState::default();
     windowed_state.select(Some(selected - window_start));
 
     f.render_stateful_widget(list, area, &mut windowed_state);
 }
 
-/// Pick a bar color based on what percentage of the parent this item uses
-fn bar_color(pct: f64) -> Color {
-    if pct >= 50.0 {
-        Color::Rgb(255, 80, 80)   // red — dominant
-    } else if pct >= 25.0 {
-        Color::Rgb(255, 180, 50)  // orange
-    } else if pct >= 10.0 {
-        Color::Rgb(255, 220, 80)  // yellow
-    } else if pct >= 3.0 {
-        Color::Rgb(100, 220, 100) // green
-    } else {
-        Color::Rgb(80, 160, 200)  // blue-gray — tiny
-    }
-}
-
-fn format_child_item(child: &FileNode, total_size: u64, bar_width: usize) -> ListItem<'static> {
+fn format_child_item(child: &FileNode, total_size: u64, available_width: usize) -> ListItem<'static> {
     let pct = percent(child.size, total_size);
     let size_str = format_size(child.size);
 
-    let max_bar = bar_width.saturating_sub(42);
-    let filled_f = (pct / 100.0) * max_bar as f64;
-    let filled = filled_f as usize;
-    let empty = max_bar.saturating_sub(filled + 1);
+    // Right side: "  1.23 GB   45.3%" — fixed 18 chars
+    let right_width = 18usize;
+    // Icon: " + " = 3 chars
+    let icon_width = 3usize;
+    let name_max = available_width.saturating_sub(right_width + icon_width);
 
-    // Smooth transition: use partial block at the boundary
-    let partials = ['█', '▉', '▊', '▋', '▌', '▍', '▎', '▏'];
-    let frac = filled_f - filled as f64;
-    let partial_idx = (frac * 8.0) as usize;
-    let partial_char = if filled < max_bar && partial_idx > 0 {
-        partials[8 - partial_idx].to_string()
-    } else {
-        String::new()
-    };
-
-    let bar_filled = "█".repeat(filled);
-    let bar_empty = " ".repeat(empty);
-
-    let color = bar_color(pct);
-
-    let name: String = if child.name.chars().count() > 24 {
-        let truncated: String = child.name.chars().take(23).collect();
+    let name: String = if child.name.chars().count() > name_max {
+        let truncated: String = child.name.chars().take(name_max.saturating_sub(1)).collect();
         format!("{}~", truncated)
     } else {
-        format!("{:<24}", child.name)
-    };
-
-    let name_color = if child.is_dir {
-        Color::Rgb(130, 180, 255) // light blue
-    } else {
-        Color::Rgb(200, 200, 200) // light gray
+        format!("{:<width$}", child.name, width = name_max)
     };
 
     let icon = if child.is_dir { "+" } else { " " };
+    let name_color = if child.is_dir {
+        Color::Rgb(120, 170, 255)
+    } else {
+        Color::Rgb(180, 180, 180)
+    };
+    let icon_color = if child.is_dir {
+        Color::Rgb(100, 150, 255)
+    } else {
+        Color::Rgb(60, 60, 60)
+    };
 
     let line = Line::from(vec![
-        Span::styled(
-            format!(" {} ", icon),
-            Style::default().fg(if child.is_dir { Color::Rgb(130, 180, 255) } else { Color::DarkGray }),
-        ),
-        Span::styled(bar_filled, Style::default().fg(color)),
-        Span::styled(partial_char, Style::default().fg(color)),
-        Span::styled(bar_empty, Style::default().fg(Color::Rgb(40, 40, 40))),
-        Span::raw("  "),
+        Span::styled(format!(" {} ", icon), Style::default().fg(icon_color)),
         Span::styled(name, Style::default().fg(name_color)),
         Span::styled(
             format!("{:>9}", size_str),
-            Style::default().fg(Color::Rgb(220, 220, 220)),
+            Style::default().fg(Color::Rgb(200, 200, 200)),
         ),
         Span::styled(
             format!("  {:>5.1}%", pct),
-            Style::default().fg(Color::Rgb(120, 120, 120)),
+            Style::default().fg(Color::Rgb(100, 100, 100)),
         ),
     ]);
 
@@ -286,115 +267,225 @@ fn format_child_item(child: &FileNode, total_size: u64, bar_width: usize) -> Lis
 }
 
 fn draw_footer(f: &mut Frame, area: Rect) {
-    let key_style = Style::default().fg(Color::Rgb(100, 200, 255));
-    let sep = Span::styled(" \u{2502} ", Style::default().fg(Color::Rgb(50, 50, 50)));
-    let desc = Style::default().fg(Color::Rgb(120, 120, 120));
+    let k = Style::default().fg(Color::Rgb(100, 200, 255));
+    let d = Style::default().fg(Color::Rgb(65, 65, 65));
+    let sp = Span::styled("  ", d);
 
-    let help = Line::from(vec![
-        Span::styled(" Enter ", key_style),
-        Span::styled("open", desc),
-        sep.clone(),
-        Span::styled("Bksp ", key_style),
-        Span::styled("back", desc),
-        sep.clone(),
-        Span::styled("j/k ", key_style),
-        Span::styled("nav", desc),
-        sep.clone(),
-        Span::styled("s ", key_style),
-        Span::styled("sort", desc),
-        sep,
-        Span::styled("q ", key_style),
-        Span::styled("quit", desc),
+    let line = Line::from(vec![
+        Span::styled(" enter", k),
+        Span::styled(" open", d),
+        sp.clone(),
+        Span::styled("bksp", k),
+        Span::styled(" back", d),
+        sp.clone(),
+        Span::styled("j/k", k),
+        Span::styled(" nav", d),
+        sp.clone(),
+        Span::styled("s", k),
+        Span::styled(" sort", d),
+        sp.clone(),
+        Span::styled("q", k),
+        Span::styled(" quit", d),
     ]);
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Rgb(50, 50, 50)));
+    f.render_widget(Paragraph::new(line), area);
+}
 
-    let paragraph = Paragraph::new(help).block(block);
-    f.render_widget(paragraph, area);
+pub fn draw_start_screen(f: &mut Frame, selected: usize, menu_items: &[&str]) {
+    let area = f.area();
+
+    let ascii_art = vec![
+        r"    ██████╗ ██╗███████╗██╗  ██╗██╗   ██╗",
+        r"    ██╔══██╗██║██╔════╝██║ ██╔╝██║   ██║",
+        r"    ██║  ██║██║███████╗█████╔╝ ██║   ██║",
+        r"    ██║  ██║██║╚════██║██╔═██╗ ██║   ██║",
+        r"    ██████╔╝██║███████║██║  ██╗╚██████╔╝",
+        r"    ╚═════╝ ╚═╝╚══════╝╚═╝  ╚═╝ ╚═════╝",
+    ];
+
+    let art_height = ascii_art.len() as u16;
+    let menu_height = menu_items.len() as u16;
+    let content_height = art_height + 1 + 1 + 2 + menu_height + 1 + 1;
+    let top_pad = area.height.saturating_sub(content_height) / 2;
+
+    let mut lines: Vec<Line> = Vec::new();
+
+    for _ in 0..top_pad {
+        lines.push(Line::from(""));
+    }
+
+    let art_width = ascii_art[0].chars().count();
+    let left_pad = (area.width as usize).saturating_sub(art_width) / 2;
+    let pad_str = " ".repeat(left_pad);
+
+    for row in &ascii_art {
+        lines.push(Line::from(Span::styled(
+            format!("{}{}", pad_str, row),
+            Style::default().fg(Color::Rgb(100, 200, 255)),
+        )));
+    }
+
+    lines.push(Line::from(""));
+    let tagline = "Fast disk usage analyzer for Windows";
+    let tagline_pad = " ".repeat((area.width as usize).saturating_sub(tagline.len()) / 2);
+    lines.push(Line::from(Span::styled(
+        format!("{}{}", tagline_pad, tagline),
+        Style::default().fg(Color::Rgb(100, 100, 100)),
+    )));
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(""));
+
+    let menu_width = 30;
+    let menu_pad = " ".repeat((area.width as usize).saturating_sub(menu_width) / 2);
+
+    for (i, item) in menu_items.iter().enumerate() {
+        if i == selected {
+            lines.push(Line::from(vec![
+                Span::raw(&menu_pad),
+                Span::styled(
+                    "  ▸ ",
+                    Style::default()
+                        .fg(Color::Rgb(100, 200, 255))
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(
+                    (*item).to_string(),
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
+                ),
+            ]));
+        } else {
+            lines.push(Line::from(vec![
+                Span::raw(&menu_pad),
+                Span::styled("    ", Style::default()),
+                Span::styled(
+                    (*item).to_string(),
+                    Style::default().fg(Color::Rgb(100, 100, 100)),
+                ),
+            ]));
+        }
+    }
+
+    lines.push(Line::from(""));
+    let hint = "↑/↓ navigate  ·  Enter select  ·  q quit";
+    let hint_pad = " ".repeat((area.width as usize).saturating_sub(hint.len()) / 2);
+    lines.push(Line::from(Span::styled(
+        format!("{}{}", hint_pad, hint),
+        Style::default().fg(Color::Rgb(60, 60, 60)),
+    )));
+
+    f.render_widget(Paragraph::new(lines), area);
+}
+
+pub fn draw_path_input(f: &mut Frame, input: &str) {
+    let area = centered_rect(50, 30, f.area());
+
+    let block = Block::default()
+        .title(" scan directory ")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Rgb(70, 70, 70)));
+
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
+    let top = inner.height.saturating_sub(5) / 2;
+    let mut lines: Vec<Line> = (0..top).map(|_| Line::from("")).collect();
+
+    lines.push(Line::from(Span::styled(
+        " path:",
+        Style::default().fg(Color::Rgb(100, 100, 100)),
+    )));
+    lines.push(Line::from(""));
+
+    let field_width = (inner.width as usize).saturating_sub(2);
+    let display_input = if input.len() > field_width.saturating_sub(1) {
+        &input[input.len() - field_width.saturating_sub(1)..]
+    } else {
+        input
+    };
+
+    lines.push(Line::from(vec![
+        Span::raw(" "),
+        Span::styled(display_input.to_string(), Style::default().fg(Color::White)),
+        Span::styled("█", Style::default().fg(Color::Rgb(100, 200, 255))),
+    ]));
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        " enter confirm  esc cancel",
+        Style::default().fg(Color::Rgb(60, 60, 60)),
+    )));
+
+    f.render_widget(Paragraph::new(lines), inner);
 }
 
 pub fn draw_drive_picker(f: &mut Frame, drives: &[DriveInfo], selected: usize) {
+    let area = centered_rect(60, 70, f.area());
+
+    let block = Block::default()
+        .title(" select drive ")
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(Color::Rgb(70, 70, 70)));
+
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3),
-            Constraint::Min(5),
-            Constraint::Length(3),
-        ])
-        .split(f.area());
+        .constraints([Constraint::Min(3), Constraint::Length(1)])
+        .split(inner);
 
-    let header = Block::default()
-        .title(" diskus — Select a drive to scan ")
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Rgb(50, 50, 50)));
-    f.render_widget(header, chunks[0]);
+    let available_width = chunks[0].width as usize;
 
-    let bar_width = (chunks[1].width as usize).saturating_sub(6);
     let items: Vec<ListItem> = drives
         .iter()
         .map(|drive| {
             let used = drive.total.saturating_sub(drive.free);
             let pct = percent(used, drive.total);
-            let max_bar = bar_width.saturating_sub(50);
-            let filled = ((pct / 100.0) * max_bar as f64) as usize;
-            let empty = max_bar.saturating_sub(filled);
 
-            let bar_filled = "█".repeat(filled);
-            let bar_empty = " ".repeat(empty);
-
-            let color = bar_color(pct);
+            let left = format!(" {}  ", drive.path);
+            let right = format!(
+                "{}  /  {}   {:>5.1}%",
+                format_size(used),
+                format_size(drive.total),
+                pct
+            );
+            let gap = available_width
+                .saturating_sub(left.chars().count() + right.chars().count());
 
             let line = Line::from(vec![
                 Span::styled(
-                    format!("  {}  ", drive.path),
-                    Style::default().fg(Color::Rgb(255, 220, 80)).add_modifier(Modifier::BOLD),
+                    left,
+                    Style::default()
+                        .fg(Color::Rgb(255, 220, 80))
+                        .add_modifier(Modifier::BOLD),
                 ),
-                Span::styled(bar_filled, Style::default().fg(color)),
-                Span::styled(bar_empty, Style::default().fg(Color::Rgb(40, 40, 40))),
-                Span::styled(
-                    format!("  {} / {}", format_size(used), format_size(drive.total)),
-                    Style::default().fg(Color::Rgb(200, 200, 200)),
-                ),
-                Span::styled(
-                    format!("  {:.0}%", pct),
-                    Style::default().fg(Color::Rgb(120, 120, 120)),
-                ),
+                Span::raw(" ".repeat(gap)),
+                Span::styled(right, Style::default().fg(Color::Rgb(160, 160, 160))),
             ]);
 
             ListItem::new(line)
         })
         .collect();
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Rgb(50, 50, 50)));
+    let list = List::new(items).highlight_style(
+        Style::default()
+            .bg(Color::Rgb(35, 35, 50))
+            .add_modifier(Modifier::BOLD),
+    );
 
     let mut state = ListState::default();
     state.select(Some(selected));
 
-    let list = List::new(items)
-        .block(block)
-        .highlight_style(
-            Style::default()
-                .bg(Color::DarkGray)
-                .add_modifier(Modifier::BOLD),
-        );
+    f.render_stateful_widget(list, chunks[0], &mut state);
 
-    f.render_stateful_widget(list, chunks[1], &mut state);
-
-    let help = Line::from(vec![
-        Span::styled(" [Enter] ", Style::default().fg(Color::Yellow)),
-        Span::raw("scan drive  "),
-        Span::styled("[Up/Down] ", Style::default().fg(Color::Yellow)),
-        Span::raw("select  "),
-        Span::styled("[q/Esc] ", Style::default().fg(Color::Yellow)),
-        Span::raw("quit"),
-    ]);
-    let footer = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::Rgb(50, 50, 50)));
-    let paragraph = Paragraph::new(help).block(footer);
-    f.render_widget(paragraph, chunks[2]);
+    f.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            " enter scan  j/k nav  q quit",
+            Style::default().fg(Color::Rgb(60, 60, 60)),
+        ))),
+        chunks[1],
+    );
 }

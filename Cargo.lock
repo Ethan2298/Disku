@@ -203,7 +203,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "diskus"
+name = "disku"
 version = "0.1.0"
 dependencies = [
  "crossterm",

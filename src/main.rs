@@ -18,7 +18,7 @@ use ratatui::Terminal;
 
 use scanner::{scan, ScanProgress};
 use tree::FileNode;
-use ui::{draw, draw_drive_picker, draw_scanning, App};
+use ui::{draw, draw_drive_picker, draw_scanning, draw_start_screen, App};
 use utils::detect_drives;
 
 fn main() -> io::Result<()> {
@@ -32,23 +32,17 @@ fn main() -> io::Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // Determine root path: either from CLI arg or drive picker
+    // Determine root path: either from CLI arg, or start screen → drive picker
     let root_path = if let Some(path) = explicit_path {
         path.canonicalize().unwrap_or(path)
     } else {
-        // Show drive picker
-        let drives = detect_drives();
-        if drives.is_empty() {
-            cleanup_terminal()?;
-            eprintln!("No drives found.");
-            return Ok(());
-        }
+        // Show start screen
+        let menu_items = ["Scan Drive", "Scan Directory", "Quit"];
+        let mut menu_sel: usize = 0;
 
-        let mut selected: usize = 0;
-        let chosen = loop {
-            let drives_ref = &drives;
-            let sel = selected;
-            terminal.draw(|f| draw_drive_picker(f, drives_ref, sel))?;
+        let menu_choice = loop {
+            let sel = menu_sel;
+            terminal.draw(|f| draw_start_screen(f, sel, &menu_items))?;
 
             if event::poll(Duration::from_millis(50))? {
                 if let Event::Key(key) = event::read()? {
@@ -61,17 +55,17 @@ fn main() -> io::Result<()> {
                             return Ok(());
                         }
                         KeyCode::Up | KeyCode::Char('k') => {
-                            if selected > 0 {
-                                selected -= 1;
+                            if menu_sel > 0 {
+                                menu_sel -= 1;
                             }
                         }
                         KeyCode::Down | KeyCode::Char('j') => {
-                            if selected + 1 < drives.len() {
-                                selected += 1;
+                            if menu_sel + 1 < menu_items.len() {
+                                menu_sel += 1;
                             }
                         }
                         KeyCode::Enter => {
-                            break drives[selected].path.clone();
+                            break menu_sel;
                         }
                         _ => {}
                     }
@@ -79,7 +73,98 @@ fn main() -> io::Result<()> {
             }
         };
 
-        PathBuf::from(chosen)
+        match menu_choice {
+            0 => {
+                // Scan Drive — show drive picker
+                let drives = detect_drives();
+                if drives.is_empty() {
+                    cleanup_terminal()?;
+                    eprintln!("No drives found.");
+                    return Ok(());
+                }
+
+                let mut selected: usize = 0;
+                let chosen = loop {
+                    let drives_ref = &drives;
+                    let sel = selected;
+                    terminal.draw(|f| draw_drive_picker(f, drives_ref, sel))?;
+
+                    if event::poll(Duration::from_millis(50))? {
+                        if let Event::Key(key) = event::read()? {
+                            if key.kind != KeyEventKind::Press {
+                                continue;
+                            }
+                            match key.code {
+                                KeyCode::Char('q') | KeyCode::Esc => {
+                                    cleanup_terminal()?;
+                                    return Ok(());
+                                }
+                                KeyCode::Up | KeyCode::Char('k') => {
+                                    if selected > 0 {
+                                        selected -= 1;
+                                    }
+                                }
+                                KeyCode::Down | KeyCode::Char('j') => {
+                                    if selected + 1 < drives.len() {
+                                        selected += 1;
+                                    }
+                                }
+                                KeyCode::Enter => {
+                                    break drives[selected].path.clone();
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                };
+                PathBuf::from(chosen)
+            }
+            1 => {
+                // Scan Directory — prompt for path input
+                let mut input = String::new();
+                loop {
+                    let input_ref = &input;
+                    terminal.draw(|f| {
+                        ui::draw_path_input(f, input_ref);
+                    })?;
+
+                    if event::poll(Duration::from_millis(50))? {
+                        if let Event::Key(key) = event::read()? {
+                            if key.kind != KeyEventKind::Press {
+                                continue;
+                            }
+                            match key.code {
+                                KeyCode::Esc => {
+                                    cleanup_terminal()?;
+                                    return Ok(());
+                                }
+                                KeyCode::Enter => {
+                                    let p = PathBuf::from(&input);
+                                    if p.is_dir() {
+                                        break;
+                                    }
+                                    // If invalid, just keep looping
+                                }
+                                KeyCode::Backspace => {
+                                    input.pop();
+                                }
+                                KeyCode::Char(c) => {
+                                    input.push(c);
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                let p = PathBuf::from(&input);
+                p.canonicalize().unwrap_or(p)
+            }
+            _ => {
+                // Quit
+                cleanup_terminal()?;
+                return Ok(());
+            }
+        }
     };
 
     // Scan in background thread
