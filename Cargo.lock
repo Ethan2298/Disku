@@ -208,6 +208,7 @@ version = "0.1.0"
 dependencies = [
  "crossterm",
  "jwalk",
+ "libc",
  "ntfs-reader",
  "ratatui",
  "winresource",

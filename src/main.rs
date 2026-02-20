@@ -1,4 +1,7 @@
+#[cfg(windows)]
 mod mft_scanner;
+#[cfg(target_os = "macos")]
+mod mac_scanner;
 mod scanner;
 mod tree;
 mod ui;
@@ -37,12 +40,17 @@ fn main() -> io::Result<()> {
         path.canonicalize().unwrap_or(path)
     } else {
         // Show start screen
-        let menu_items = ["Scan Drive", "Scan Directory", "Quit"];
+        let menu_items = if cfg!(windows) {
+            vec!["Scan Drive", "Scan Directory", "Quit"]
+        } else {
+            vec!["Scan Volume", "Scan Directory", "Quit"]
+        };
         let mut menu_sel: usize = 0;
 
         let menu_choice = loop {
             let sel = menu_sel;
-            terminal.draw(|f| draw_start_screen(f, sel, &menu_items))?;
+            let items = &menu_items;
+            terminal.draw(|f| draw_start_screen(f, sel, items))?;
 
             if event::poll(Duration::from_millis(50))? {
                 if let Event::Key(key) = event::read()? {
@@ -75,7 +83,7 @@ fn main() -> io::Result<()> {
 
         match menu_choice {
             0 => {
-                // Scan Drive — show drive picker
+                // Scan Drive/Volume — show drive picker
                 let drives = detect_drives();
                 if drives.is_empty() {
                     cleanup_terminal()?;
@@ -179,16 +187,25 @@ fn main() -> io::Result<()> {
             errors: scan_errors,
         };
 
-        // Try MFT scan first (fast, requires admin + NTFS)
-        let path_str = scan_path.to_string_lossy();
-        if path_str.len() >= 2 && path_str.as_bytes()[1] == b':' {
-            let drive_letter = path_str.chars().next().unwrap();
-            if let Some(root) = mft_scanner::scan_mft(drive_letter, &p) {
-                return root;
+        // Platform-specific fast path, falling back to jwalk
+        #[cfg(windows)]
+        {
+            let path_str = scan_path.to_string_lossy();
+            if path_str.len() >= 2 && path_str.as_bytes()[1] == b':' {
+                let drive_letter = path_str.chars().next().unwrap();
+                if let Some(root) = mft_scanner::scan_mft(drive_letter, &p) {
+                    return root;
+                }
             }
         }
 
-        // Fall back to directory walking
+        #[cfg(target_os = "macos")]
+        {
+            return mac_scanner::scan_bulk(&scan_path, &p);
+        }
+
+        // Universal fallback (Windows non-NTFS, Linux, etc.)
+        #[allow(unreachable_code)]
         scan(&scan_path, &p)
     });
 
