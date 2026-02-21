@@ -24,6 +24,13 @@
   --color-magenta: #b070b0;
 }
 
+.fullscreen {
+  --bg-primary: rgb(10, 14, 18);
+  --bg-secondary: rgb(16, 24, 32);
+  --bg-hover: rgb(26, 36, 48);
+  --bg-selected: rgb(30, 46, 62);
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -44,6 +51,10 @@ body,
   flex-direction: column;
 }
 
+.platform-windows #app {
+  border: 1px solid var(--color-border);
+}
+
 body {
   font-family: "SF Mono", "Cascadia Code", "Fira Code", "JetBrains Mono",
     "Consolas", monospace;
@@ -52,4 +63,5 @@ body {
   color: var(--text-primary);
   user-select: none;
   -webkit-user-select: none;
+  border-radius: 10px;
 }
