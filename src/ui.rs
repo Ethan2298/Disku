@@ -51,7 +51,7 @@ impl App {
             node = &node.children[idx];
             parts.push(node.name.clone());
         }
-        parts.join("\\")
+        parts.join(std::path::MAIN_SEPARATOR_STR)
     }
 
     pub fn move_up(&mut self) {
@@ -326,7 +326,13 @@ pub fn draw_start_screen(f: &mut Frame, selected: usize, menu_items: &[&str]) {
     }
 
     lines.push(Line::from(""));
-    let tagline = "Fast disk usage analyzer for Windows";
+    let tagline = if cfg!(windows) {
+        "Fast disk usage analyzer for Windows"
+    } else if cfg!(target_os = "macos") {
+        "Fast disk usage analyzer for macOS"
+    } else {
+        "Fast disk usage analyzer"
+    };
     let tagline_pad = " ".repeat((area.width as usize).saturating_sub(tagline.len()) / 2);
     lines.push(Line::from(Span::styled(
         format!("{}{}", tagline_pad, tagline),
@@ -425,7 +431,7 @@ pub fn draw_drive_picker(f: &mut Frame, drives: &[DriveInfo], selected: usize) {
     let area = centered_rect(60, 70, f.area());
 
     let block = Block::default()
-        .title(" select drive ")
+        .title(if cfg!(windows) { " select drive " } else { " select volume " })
         .borders(Borders::ALL)
         .border_style(Style::default().fg(Color::Rgb(70, 70, 70)));
 

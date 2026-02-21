@@ -32,12 +32,12 @@ pub struct DriveInfo {
     pub free: u64,
 }
 
-/// Detect available drives on Windows by probing A:-Z:
+/// Detect available drives/volumes on the current platform.
+#[cfg(windows)]
 pub fn detect_drives() -> Vec<DriveInfo> {
-    use std::os::windows::ffi::OsStrExt;
     use std::ffi::OsString;
+    use std::os::windows::ffi::OsStrExt;
 
-    // Use GetLogicalDrives to find which letters exist
     let mask = unsafe { windows_get_logical_drives() };
     let mut drives = Vec::new();
 
@@ -46,7 +46,6 @@ pub fn detect_drives() -> Vec<DriveInfo> {
             let letter = (b'A' + i as u8) as char;
             let root = format!("{}:\\", letter);
 
-            // Get disk space info
             let wide: Vec<u16> = OsString::from(&root)
                 .encode_wide()
                 .chain(std::iter::once(0))
@@ -76,7 +75,7 @@ pub fn detect_drives() -> Vec<DriveInfo> {
     drives
 }
 
-// FFI declarations for Windows APIs
+#[cfg(windows)]
 extern "system" {
     fn GetLogicalDrives() -> u32;
     fn GetDiskFreeSpaceExW(
@@ -87,6 +86,116 @@ extern "system" {
     ) -> i32;
 }
 
+#[cfg(windows)]
 unsafe fn windows_get_logical_drives() -> u32 {
     unsafe { GetLogicalDrives() }
+}
+
+/// Detect mounted volumes on macOS.
+#[cfg(target_os = "macos")]
+pub fn detect_drives() -> Vec<DriveInfo> {
+    let mut drives = Vec::new();
+
+    // Always include root
+    if let Some(info) = statvfs_drive("/") {
+        drives.push(info);
+    }
+
+    // Enumerate /Volumes
+    if let Ok(entries) = std::fs::read_dir("/Volumes") {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let path_str = path.to_string_lossy().to_string();
+
+            // Skip symlinks that point back to root
+            if let Ok(target) = std::fs::read_link(&path) {
+                if target == std::path::Path::new("/") {
+                    continue;
+                }
+            }
+
+            if let Some(info) = statvfs_drive(&path_str) {
+                // Avoid duplicate of root
+                if info.total == drives.first().map(|d| d.total).unwrap_or(0)
+                    && info.free == drives.first().map(|d| d.free).unwrap_or(0)
+                {
+                    continue;
+                }
+                drives.push(info);
+            }
+        }
+    }
+
+    drives
+}
+
+/// Detect mounted filesystems on Linux.
+#[cfg(target_os = "linux")]
+pub fn detect_drives() -> Vec<DriveInfo> {
+    let mut drives = Vec::new();
+    let mut seen_devs = std::collections::HashSet::new();
+
+    if let Ok(content) = std::fs::read_to_string("/proc/mounts") {
+        for line in content.lines() {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() < 2 {
+                continue;
+            }
+            let device = parts[0];
+            let mount_point = parts[1];
+
+            // Only real block devices
+            if !device.starts_with("/dev/") {
+                continue;
+            }
+            // Skip snap/loop
+            if device.contains("loop") {
+                continue;
+            }
+            if seen_devs.contains(device) {
+                continue;
+            }
+            seen_devs.insert(device.to_string());
+
+            if let Some(info) = statvfs_drive(mount_point) {
+                if info.total > 0 {
+                    drives.push(info);
+                }
+            }
+        }
+    }
+
+    // Fallback: at least show root
+    if drives.is_empty() {
+        if let Some(info) = statvfs_drive("/") {
+            drives.push(info);
+        }
+    }
+
+    drives
+}
+
+/// Use statvfs to get total/free bytes for a mount point.
+#[cfg(unix)]
+fn statvfs_drive(path: &str) -> Option<DriveInfo> {
+    use std::ffi::CString;
+    use std::mem::MaybeUninit;
+
+    let c_path = CString::new(path).ok()?;
+    let mut stat = MaybeUninit::<libc::statvfs>::uninit();
+
+    let ret = unsafe { libc::statvfs(c_path.as_ptr(), stat.as_mut_ptr()) };
+    if ret != 0 {
+        return None;
+    }
+
+    let stat = unsafe { stat.assume_init() };
+    let total = stat.f_blocks as u64 * stat.f_frsize as u64;
+    let free = stat.f_bavail as u64 * stat.f_frsize as u64;
+
+    Some(DriveInfo {
+        path: path.to_string(),
+        total,
+        free,
+    })
 }
