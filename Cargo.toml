@@ -1,29 +1,3 @@
-[package]
-name = "disku"
-version = "0.1.0"
-edition = "2021"
-
-[lib]
-name = "disku"
-path = "src/lib.rs"
-
-[[bin]]
-name = "disku"
-path = "src/main.rs"
-
-[[bin]]
-name = "bench_scan"
-path = "src/bin/bench_scan.rs"
-
-[dependencies]
-ratatui = "0.29"
-crossterm = "0.28"
-jwalk = "0.8"
-libc = "0.2"
-rayon = "1.11"
-
-[target.'cfg(windows)'.dependencies]
-ntfs-reader = "0.4"
-
-[target.'cfg(windows)'.build-dependencies]
-winresource = "0.1"
+[workspace]
+members = ["disku-core", "disku-tui", "disku-bench"]
+resolver = "2"

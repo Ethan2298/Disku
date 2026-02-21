@@ -25,7 +25,7 @@ pub fn percent(part: u64, total: u64) -> f64 {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct DriveInfo {
     pub path: String,
     pub total: u64,

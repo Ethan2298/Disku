@@ -4,8 +4,8 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 use ratatui::Frame;
 
-use disku::tree::FileNode;
-use disku::utils::{format_size, percent, DriveInfo};
+use disku_core::tree::FileNode;
+use disku_core::utils::{format_size, percent, DriveInfo};
 
 pub struct App {
     pub tree: FileNode,
@@ -225,7 +225,7 @@ fn format_child_item(child: &FileNode, total_size: u64, available_width: usize) 
     let pct = percent(child.size, total_size);
     let size_str = format_size(child.size);
 
-    // Right side: "  1.23 GB   45.3%" — fixed 18 chars
+    // Right side: "  1.23 GB   45.3%" -- fixed 18 chars
     let right_width = 18usize;
     // Icon: " + " = 3 chars
     let icon_width = 3usize;

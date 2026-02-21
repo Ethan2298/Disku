@@ -1,0 +1,12 @@
+[package]
+name = "disku-bench"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "bench_scan"
+path = "src/main.rs"
+
+[dependencies]
+disku-core = { path = "../disku-core" }
+libc = "0.2"

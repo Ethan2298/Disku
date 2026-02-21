@@ -216,9 +216,9 @@ struct RunResult {
 fn run_mac_scan(path: &std::path::Path) -> RunResult {
     use std::sync::atomic::Ordering;
 
-    let progress = disku::scanner::ScanProgress::new();
+    let progress = disku_core::scanner::ScanProgress::new();
     let start = std::time::Instant::now();
-    let tree = disku::mac_scanner::scan_bulk(path, &progress);
+    let tree = disku_core::mac_scanner::scan_bulk(path, &progress);
     let wall_secs = start.elapsed().as_secs_f64();
 
     let files_scanned = progress.files_scanned.load(Ordering::Relaxed);
@@ -240,9 +240,9 @@ fn run_mac_scan(path: &std::path::Path) -> RunResult {
 fn run_jwalk_scan(path: &std::path::Path) -> RunResult {
     use std::sync::atomic::Ordering;
 
-    let progress = disku::scanner::ScanProgress::new();
+    let progress = disku_core::scanner::ScanProgress::new();
     let start = std::time::Instant::now();
-    let tree = disku::scanner::scan(path, &progress);
+    let tree = disku_core::scanner::scan(path, &progress);
     let wall_secs = start.elapsed().as_secs_f64();
 
     let files_scanned = progress.files_scanned.load(Ordering::Relaxed);
@@ -262,7 +262,7 @@ fn run_jwalk_scan(path: &std::path::Path) -> RunResult {
 
 // -- Tree stats --
 
-fn tree_stats(node: &disku::tree::FileNode) -> (u64, u64, u64) {
+fn tree_stats(node: &disku_core::tree::FileNode) -> (u64, u64, u64) {
     let mut files: u64 = 0;
     let mut dirs: u64 = 0;
     let mut size: u64 = 0;
@@ -271,7 +271,7 @@ fn tree_stats(node: &disku::tree::FileNode) -> (u64, u64, u64) {
 }
 
 fn tree_stats_recursive(
-    node: &disku::tree::FileNode,
+    node: &disku_core::tree::FileNode,
     files: &mut u64,
     dirs: &mut u64,
     size: &mut u64,
@@ -315,7 +315,7 @@ fn print_consistency(results: &[RunResult]) {
             format_bytes(first_size)
         );
     } else {
-        println!("consistency: WARN — results differ across runs:");
+        println!("consistency: WARN -- results differ across runs:");
         for (i, r) in results.iter().enumerate() {
             println!(
                 "  run {}: files={} dirs={} size={} ({} bytes)",

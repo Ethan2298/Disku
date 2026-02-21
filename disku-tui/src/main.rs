@@ -1,5 +1,3 @@
-#[cfg(windows)]
-mod mft_scanner;
 mod ui;
 
 use std::io;
@@ -14,10 +12,10 @@ use crossterm::execute;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 
-use disku::scanner::{scan, ScanProgress};
-use disku::tree::FileNode;
+use disku_core::scanner::{scan, ScanProgress};
+use disku_core::tree::FileNode;
 use ui::{draw, draw_drive_picker, draw_scanning, draw_start_screen, App};
-use disku::utils::detect_drives;
+use disku_core::utils::detect_drives;
 
 fn main() -> io::Result<()> {
     // If a path was passed as CLI arg, use it directly
@@ -30,7 +28,7 @@ fn main() -> io::Result<()> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // Determine root path: either from CLI arg, or start screen → drive picker
+    // Determine root path: either from CLI arg, or start screen -> drive picker
     let root_path = if let Some(path) = explicit_path {
         path.canonicalize().unwrap_or(path)
     } else {
@@ -78,7 +76,7 @@ fn main() -> io::Result<()> {
 
         match menu_choice {
             0 => {
-                // Scan Drive/Volume — show drive picker
+                // Scan Drive/Volume -- show drive picker
                 let drives = detect_drives();
                 if drives.is_empty() {
                     cleanup_terminal()?;
@@ -123,7 +121,7 @@ fn main() -> io::Result<()> {
                 PathBuf::from(chosen)
             }
             1 => {
-                // Scan Directory — prompt for path input
+                // Scan Directory -- prompt for path input
                 let mut input = String::new();
                 loop {
                     let input_ref = &input;
@@ -188,7 +186,7 @@ fn main() -> io::Result<()> {
             let path_str = scan_path.to_string_lossy();
             if path_str.len() >= 2 && path_str.as_bytes()[1] == b':' {
                 let drive_letter = path_str.chars().next().unwrap();
-                if let Some(root) = mft_scanner::scan_mft(drive_letter, &p) {
+                if let Some(root) = disku_core::mft_scanner::scan_mft(drive_letter, &p) {
                     return root;
                 }
             }
@@ -196,7 +194,7 @@ fn main() -> io::Result<()> {
 
         #[cfg(target_os = "macos")]
         {
-            return disku::mac_scanner::scan_bulk(&scan_path, &p);
+            return disku_core::mac_scanner::scan_bulk(&scan_path, &p);
         }
 
         // Universal fallback (Windows non-NTFS, Linux, etc.)

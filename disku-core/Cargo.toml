@@ -1,0 +1,13 @@
+[package]
+name = "disku-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+jwalk = "0.8"
+libc = "0.2"
+rayon = "1.11"
+serde = { version = "1", features = ["derive"] }
+
+[target.'cfg(windows)'.dependencies]
+ntfs-reader = "0.4"
