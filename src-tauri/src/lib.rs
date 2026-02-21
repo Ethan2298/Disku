@@ -18,14 +18,18 @@ pub fn run() {
                     &window,
                     NSVisualEffectMaterial::HudWindow,
                     Some(NSVisualEffectState::Active),
-                    Some(12.0),
+                    Some(10.0),
                 )
                 .expect("Failed to apply vibrancy");
             }
 
             #[cfg(target_os = "windows")]
             {
-                let _ = window_vibrancy::apply_blur(&window, Some((10, 14, 18, 166)));
+                // Disable shadow to prevent green tint on transparent windows.
+                let _ = window.set_shadow(false);
+
+                // Acrylic background — same effect Warp uses on Windows.
+                let _ = window_vibrancy::apply_acrylic(&window, Some((10, 14, 18, 166)));
             }
 
             Ok(())
