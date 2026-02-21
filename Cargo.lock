@@ -211,6 +211,7 @@ dependencies = [
  "libc",
  "ntfs-reader",
  "ratatui",
+ "rayon",
  "winresource",
 ]
 

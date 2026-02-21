@@ -3,6 +3,8 @@ use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::sync::atomic::Ordering;
 
+use rayon::prelude::*;
+
 use crate::scanner::ScanProgress;
 use crate::tree::FileNode;
 
@@ -50,6 +52,12 @@ struct BulkEntry {
     size: u64,
 }
 
+/// Get the device ID for a path (used to avoid crossing filesystem boundaries).
+fn get_dev(path: &Path) -> Option<u64> {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::symlink_metadata(path).map(|m| m.dev()).ok()
+}
+
 /// Scan a directory tree using macOS getattrlistbulk for fast enumeration.
 pub fn scan_bulk(root: &Path, progress: &ScanProgress) -> FileNode {
     let root_name = root
@@ -57,38 +65,56 @@ pub fn scan_bulk(root: &Path, progress: &ScanProgress) -> FileNode {
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| root.to_string_lossy().to_string());
 
+    let root_dev = get_dev(root);
+    let children = scan_dir_recursive(root, progress, root_dev);
     let mut node = FileNode::new_dir(root_name);
-    scan_dir_recursive(root, &mut node, progress);
+    node.children = children;
     node.size = node.children.iter().map(|c| c.size).sum();
     node.sort_by_size();
     node
 }
 
-fn scan_dir_recursive(dir_path: &Path, parent_node: &mut FileNode, progress: &ScanProgress) {
+fn scan_dir_recursive(dir_path: &Path, progress: &ScanProgress, root_dev: Option<u64>) -> Vec<FileNode> {
     let entries = match read_dir_bulk(dir_path) {
         Some(e) => e,
         None => {
-            // Fall back to simple readdir + stat for this directory
-            read_dir_fallback(dir_path, progress, parent_node);
-            return;
+            return read_dir_fallback(dir_path, progress, root_dev);
         }
     };
+
+    let mut file_nodes: Vec<FileNode> = Vec::new();
+    let mut dir_entries: Vec<(String, std::path::PathBuf)> = Vec::new();
 
     for entry in entries {
         progress.files_scanned.fetch_add(1, Ordering::Relaxed);
 
         if entry.is_dir {
             let child_path = dir_path.join(&entry.name);
-            let mut child_node = FileNode::new_dir(entry.name);
-            scan_dir_recursive(&child_path, &mut child_node, progress);
-            child_node.size = child_node.children.iter().map(|c| c.size).sum();
-            parent_node.children.push(child_node);
+            // Skip directories on different filesystems (network mounts, iCloud, etc.)
+            if let Some(rd) = root_dev {
+                if get_dev(&child_path) != Some(rd) {
+                    continue;
+                }
+            }
+            dir_entries.push((entry.name, child_path));
         } else {
-            parent_node
-                .children
-                .push(FileNode::new_file(entry.name, entry.size));
+            file_nodes.push(FileNode::new_file(entry.name, entry.size));
         }
     }
+
+    let dir_nodes: Vec<FileNode> = dir_entries
+        .into_par_iter()
+        .map(|(name, child_path)| {
+            let children = scan_dir_recursive(&child_path, progress, root_dev);
+            let mut child_node = FileNode::new_dir(name);
+            child_node.children = children;
+            child_node.size = child_node.children.iter().map(|c| c.size).sum();
+            child_node
+        })
+        .collect();
+
+    file_nodes.extend(dir_nodes);
+    file_nodes
 }
 
 /// Use getattrlistbulk to read all entries in a directory in bulk.
@@ -162,22 +188,24 @@ fn read_dir_bulk(dir_path: &Path) -> Option<Vec<BulkEntry>> {
 /// Parse a single entry from the getattrlistbulk buffer.
 fn parse_bulk_entry(data: &[u8]) -> Option<BulkEntry> {
     // Layout after the 4-byte length:
-    //   returned_attrs: AttrList (20 bytes)
-    //   error: u32 (4 bytes) — if ATTR_CMN_ERROR was returned
+    //   returned_attrs: attribute_set_t (20 bytes: 5 x u32)
+    //     { commonattr, volattr, dirattr, fileattr, forkattr }
+    //   error: u32 (4 bytes) — only if ATTR_CMN_ERROR bit set in returned commonattr
     //   name: attrreference_t { offset: i32, length: u32 } (8 bytes)
     //   objtype: u32 (4 bytes)
     //   [file_datalength: u64 (8 bytes)] — only for files if fileattr was returned
 
-    if data.len() < 4 + 20 {
+    const ATTR_SET_SIZE: usize = 20; // attribute_set_t = 5 x u32
+    if data.len() < 4 + ATTR_SET_SIZE {
         return None;
     }
 
     let mut pos = 4; // skip entry length
 
-    // Read returned attributes bitmap
-    let ret_commonattr = u32::from_ne_bytes(data[pos + 4..pos + 8].try_into().ok()?);
-    let ret_fileattr = u32::from_ne_bytes(data[pos + 16..pos + 20].try_into().ok()?);
-    pos += 20; // skip returned AttrList
+    // Read returned attribute_set_t (NOT AttrList — no bitmapcount/reserved header)
+    let ret_commonattr = u32::from_ne_bytes(data[pos..pos + 4].try_into().ok()?);
+    let ret_fileattr = u32::from_ne_bytes(data[pos + 12..pos + 16].try_into().ok()?);
+    pos += ATTR_SET_SIZE; // skip attribute_set_t (20 bytes)
 
     // Error attribute (if present)
     if ret_commonattr & ATTR_CMN_ERROR != 0 {
@@ -238,14 +266,17 @@ fn parse_bulk_entry(data: &[u8]) -> Option<BulkEntry> {
 }
 
 /// Simple readdir + stat fallback for a single directory when getattrlistbulk fails.
-fn read_dir_fallback(dir_path: &Path, progress: &ScanProgress, parent_node: &mut FileNode) {
+fn read_dir_fallback(dir_path: &Path, progress: &ScanProgress, root_dev: Option<u64>) -> Vec<FileNode> {
     let entries = match std::fs::read_dir(dir_path) {
         Ok(e) => e,
         Err(_) => {
             progress.errors.fetch_add(1, Ordering::Relaxed);
-            return;
+            return Vec::new();
         }
     };
+
+    let mut file_nodes: Vec<FileNode> = Vec::new();
+    let mut dir_entries: Vec<(String, std::path::PathBuf)> = Vec::new();
 
     for entry in entries.flatten() {
         progress.files_scanned.fetch_add(1, Ordering::Relaxed);
@@ -261,14 +292,29 @@ fn read_dir_fallback(dir_path: &Path, progress: &ScanProgress, parent_node: &mut
         let name = entry.file_name().to_string_lossy().to_string();
 
         if meta.is_dir() {
-            let mut child_node = FileNode::new_dir(name);
-            scan_dir_recursive(&entry.path(), &mut child_node, progress);
-            child_node.size = child_node.children.iter().map(|c| c.size).sum();
-            parent_node.children.push(child_node);
+            // Skip directories on different filesystems (network mounts, iCloud, etc.)
+            if let Some(rd) = root_dev {
+                if get_dev(&entry.path()) != Some(rd) {
+                    continue;
+                }
+            }
+            dir_entries.push((name, entry.path()));
         } else {
-            parent_node
-                .children
-                .push(FileNode::new_file(name, meta.len()));
+            file_nodes.push(FileNode::new_file(name, meta.len()));
         }
     }
+
+    let dir_nodes: Vec<FileNode> = dir_entries
+        .into_par_iter()
+        .map(|(name, child_path)| {
+            let children = scan_dir_recursive(&child_path, progress, root_dev);
+            let mut child_node = FileNode::new_dir(name);
+            child_node.children = children;
+            child_node.size = child_node.children.iter().map(|c| c.size).sum();
+            child_node
+        })
+        .collect();
+
+    file_nodes.extend(dir_nodes);
+    file_nodes
 }
