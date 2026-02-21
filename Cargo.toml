@@ -3,6 +3,14 @@ name = "disku"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "disku"
+path = "src/lib.rs"
+
+[[bin]]
+name = "disku"
+path = "src/main.rs"
+
 [dependencies]
 ratatui = "0.29"
 crossterm = "0.28"

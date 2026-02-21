@@ -1,11 +1,6 @@
 #[cfg(windows)]
 mod mft_scanner;
-#[cfg(target_os = "macos")]
-mod mac_scanner;
-mod scanner;
-mod tree;
 mod ui;
-mod utils;
 
 use std::io;
 use std::path::PathBuf;
@@ -19,10 +14,10 @@ use crossterm::execute;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 
-use scanner::{scan, ScanProgress};
-use tree::FileNode;
+use disku::scanner::{scan, ScanProgress};
+use disku::tree::FileNode;
 use ui::{draw, draw_drive_picker, draw_scanning, draw_start_screen, App};
-use utils::detect_drives;
+use disku::utils::detect_drives;
 
 fn main() -> io::Result<()> {
     // If a path was passed as CLI arg, use it directly
@@ -201,7 +196,7 @@ fn main() -> io::Result<()> {
 
         #[cfg(target_os = "macos")]
         {
-            return mac_scanner::scan_bulk(&scan_path, &p);
+            return disku::mac_scanner::scan_bulk(&scan_path, &p);
         }
 
         // Universal fallback (Windows non-NTFS, Linux, etc.)

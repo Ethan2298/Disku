@@ -4,8 +4,8 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 use ratatui::Frame;
 
-use crate::tree::FileNode;
-use crate::utils::{format_size, percent, DriveInfo};
+use disku::tree::FileNode;
+use disku::utils::{format_size, percent, DriveInfo};
 
 pub struct App {
     pub tree: FileNode,
