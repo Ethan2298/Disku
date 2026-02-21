@@ -1,0 +1,55 @@
+:root {
+  /* Warp "Nights" theme — 65% opacity for blur-through */
+  --bg-primary: rgba(10, 14, 18, 0.65);
+  --bg-secondary: rgba(16, 24, 32, 0.65);
+  --bg-hover: rgba(26, 36, 48, 0.5);
+  --bg-selected: rgba(30, 46, 62, 0.55);
+
+  --text-primary: #e0e0e0;
+  --text-secondary: #c0c0c0;
+  --text-muted: #505050;
+
+  --color-dir: #80a8d8;
+  --color-file: #d0d0d0;
+  --color-accent: #4a8a9a;
+  --color-accent-dim: #3a6a7a;
+  --color-drive: #c8b860;
+  --color-border: rgba(42, 52, 64, 0.6);
+  --color-size: #c0c0c0;
+  --color-pct: #505050;
+
+  --color-red: #c87070;
+  --color-green: #70b870;
+  --color-cyan: #60b0b0;
+  --color-magenta: #b070b0;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+}
+
+body {
+  font-family: "SF Mono", "Cascadia Code", "Fira Code", "JetBrains Mono",
+    "Consolas", monospace;
+  font-size: 13px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  user-select: none;
+  -webkit-user-select: none;
+}
