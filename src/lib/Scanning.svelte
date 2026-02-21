@@ -5,30 +5,54 @@
   interface Props {
     path: string;
     filesScanned: number;
-    onProgress: (files: number, errors: number) => void;
+    dirsScanned: number;
+    onProgress: (files: number, dirs: number, errors: number) => void;
     onComplete: () => void;
   }
 
-  let { path, filesScanned, onProgress, onComplete }: Props = $props();
+  let { path, filesScanned, dirsScanned, onProgress, onComplete }: Props =
+    $props();
 
-  let dots: string = $state("");
+  let recentPaths: string[] = $state([]);
+  const MAX_VISIBLE = 16;
+
+  let spinnerFrame = $state(0);
+  const spinnerChars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+  function shortenPath(fullPath: string): string {
+    if (fullPath.startsWith(path)) {
+      const rel = fullPath.slice(path.length);
+      return rel.startsWith("/") ? rel.slice(1) : rel;
+    }
+    return fullPath;
+  }
 
   onMount(() => {
-    // Animate dots
-    const interval = setInterval(() => {
-      dots = dots.length >= 3 ? "" : dots + ".";
-    }, 400);
+    const spinnerInterval = setInterval(() => {
+      spinnerFrame = (spinnerFrame + 1) % spinnerChars.length;
+    }, 80);
 
-    // Start scan with progress channel
     const onEvent = new Channel<{
       kind: string;
       files_scanned?: number;
+      dirs_scanned?: number;
       errors?: number;
+      current_path?: string;
     }>();
 
     onEvent.onmessage = (event) => {
       if (event.kind === "Progress") {
-        onProgress(event.files_scanned ?? 0, event.errors ?? 0);
+        onProgress(
+          event.files_scanned ?? 0,
+          event.dirs_scanned ?? 0,
+          event.errors ?? 0,
+        );
+        if (event.current_path) {
+          const shortened = shortenPath(event.current_path);
+          if (shortened && shortened !== recentPaths[0]) {
+            recentPaths = [shortened, ...recentPaths].slice(0, MAX_VISIBLE);
+          }
+        }
       } else if (event.kind === "Complete") {
         onComplete();
       }
@@ -39,7 +63,7 @@
     });
 
     return () => {
-      clearInterval(interval);
+      clearInterval(spinnerInterval);
     };
   });
 </script>
@@ -48,13 +72,25 @@
   <div class="panel">
     <div class="panel-title">disku</div>
     <div class="panel-content">
-      {#if filesScanned === 0}
-        <p class="status initializing">initializing{dots}</p>
-        <p class="detail">reading filesystem...</p>
-      {:else}
-        <p class="status active">scanning{dots}</p>
-        <p class="detail">{filesScanned.toLocaleString()} files</p>
-      {/if}
+      <div class="status-row">
+        <span class="spinner">{spinnerChars[spinnerFrame]}</span>
+        {#if filesScanned === 0 && dirsScanned === 0}
+          <span class="status initializing">initializing</span>
+        {:else}
+          <span class="status active">scanning</span>
+        {/if}
+      </div>
+      <p class="detail">
+        {filesScanned.toLocaleString()} files &middot; {dirsScanned.toLocaleString()}
+        folders &middot; {path}
+      </p>
+    </div>
+    <div class="file-feed">
+      {#each recentPaths as p, i}
+        <div class="feed-line" style:opacity={1 - i * (0.7 / MAX_VISIBLE)}>
+          <span class="feed-path">{p}</span>
+        </div>
+      {/each}
     </div>
   </div>
 </div>
@@ -70,11 +106,12 @@
 
   .panel {
     border: 1px solid var(--color-border);
-    width: 44%;
-    min-width: 300px;
-    max-width: 500px;
+    width: 80%;
+    min-width: 360px;
+    max-width: 700px;
     display: flex;
     flex-direction: column;
+    max-height: 70vh;
   }
 
   .panel-title {
@@ -85,10 +122,24 @@
   }
 
   .panel-content {
-    padding: 32px 24px;
+    padding: 16px 16px 12px;
     display: flex;
     flex-direction: column;
+    gap: 4px;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .status-row {
+    display: flex;
+    align-items: center;
     gap: 8px;
+  }
+
+  .spinner {
+    color: var(--color-accent);
+    font-size: 16px;
+    width: 16px;
+    text-align: center;
   }
 
   .status {
@@ -106,6 +157,34 @@
 
   .detail {
     color: var(--text-secondary);
-    font-size: 13px;
+    font-size: 12px;
+    padding-left: 24px;
+  }
+
+  .file-feed {
+    flex: 1;
+    overflow: hidden;
+    padding: 8px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .feed-line {
+    display: flex;
+    align-items: center;
+    font-size: 12px;
+    height: 20px;
+    min-height: 20px;
+    color: var(--text-secondary);
+    overflow: hidden;
+  }
+
+  .feed-path {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    direction: rtl;
+    text-align: left;
   }
 </style>

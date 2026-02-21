@@ -177,7 +177,9 @@ fn main() -> io::Result<()> {
     let scan_handle = thread::spawn(move || {
         let p = ScanProgress {
             files_scanned: scan_files,
+            dirs_scanned: progress.dirs_scanned.clone(),
             errors: scan_errors,
+            current_path: progress.current_path.clone(),
         };
 
         // Platform-specific fast path, falling back to jwalk

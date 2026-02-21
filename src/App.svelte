@@ -22,6 +22,7 @@
   let currentView: View = $state("start");
   let scanPath: string = $state("");
   let filesScanned: number = $state(0);
+  let dirsScanned: number = $state(0);
   let scanErrors: number = $state(0);
 
   function onMenuSelect(choice: string) {
@@ -38,6 +39,7 @@
   function onDriveSelect(path: string) {
     scanPath = path;
     filesScanned = 0;
+    dirsScanned = 0;
     scanErrors = 0;
     currentView = "scanning";
   }
@@ -45,6 +47,7 @@
   function onPathConfirm(path: string) {
     scanPath = path;
     filesScanned = 0;
+    dirsScanned = 0;
     scanErrors = 0;
     currentView = "scanning";
   }
@@ -53,8 +56,9 @@
     currentView = "browser";
   }
 
-  function onScanProgress(files: number, errors: number) {
+  function onScanProgress(files: number, dirs: number, errors: number) {
     filesScanned = files;
+    dirsScanned = dirs;
     scanErrors = errors;
   }
 
@@ -77,6 +81,7 @@
     <Scanning
       path={scanPath}
       {filesScanned}
+      {dirsScanned}
       onProgress={onScanProgress}
       onComplete={onScanComplete}
     />
@@ -87,7 +92,7 @@
 
 <style>
   .titlebar {
-    height: 36px;
+    height: 52px;
     width: 100%;
     flex-shrink: 0;
     -webkit-app-region: drag;

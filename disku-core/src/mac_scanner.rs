@@ -75,6 +75,10 @@ pub fn scan_bulk(root: &Path, progress: &ScanProgress) -> FileNode {
 }
 
 fn scan_dir_recursive(dir_path: &Path, progress: &ScanProgress, root_dev: Option<u64>) -> Vec<FileNode> {
+    if let Ok(mut cp) = progress.current_path.try_lock() {
+        *cp = dir_path.to_string_lossy().to_string();
+    }
+
     let entries = match read_dir_bulk(dir_path) {
         Some(e) => e,
         None => {
@@ -86,7 +90,11 @@ fn scan_dir_recursive(dir_path: &Path, progress: &ScanProgress, root_dev: Option
     let mut dir_entries: Vec<(String, std::path::PathBuf)> = Vec::new();
 
     for entry in entries {
-        progress.files_scanned.fetch_add(1, Ordering::Relaxed);
+        if entry.is_dir {
+            progress.dirs_scanned.fetch_add(1, Ordering::Relaxed);
+        } else {
+            progress.files_scanned.fetch_add(1, Ordering::Relaxed);
+        }
 
         if entry.is_dir {
             let child_path = dir_path.join(&entry.name);
@@ -279,8 +287,6 @@ fn read_dir_fallback(dir_path: &Path, progress: &ScanProgress, root_dev: Option<
     let mut dir_entries: Vec<(String, std::path::PathBuf)> = Vec::new();
 
     for entry in entries.flatten() {
-        progress.files_scanned.fetch_add(1, Ordering::Relaxed);
-
         let meta = match entry.metadata() {
             Ok(m) => m,
             Err(_) => {
@@ -292,6 +298,7 @@ fn read_dir_fallback(dir_path: &Path, progress: &ScanProgress, root_dev: Option<
         let name = entry.file_name().to_string_lossy().to_string();
 
         if meta.is_dir() {
+            progress.dirs_scanned.fetch_add(1, Ordering::Relaxed);
             // Skip directories on different filesystems (network mounts, iCloud, etc.)
             if let Some(rd) = root_dev {
                 if get_dev(&entry.path()) != Some(rd) {
@@ -300,6 +307,7 @@ fn read_dir_fallback(dir_path: &Path, progress: &ScanProgress, root_dev: Option<
             }
             dir_entries.push((name, entry.path()));
         } else {
+            progress.files_scanned.fetch_add(1, Ordering::Relaxed);
             file_nodes.push(FileNode::new_file(name, meta.len()));
         }
     }

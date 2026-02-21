@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
@@ -25,7 +25,12 @@ impl Default for AppState {
 #[derive(Clone, Serialize)]
 #[serde(tag = "kind")]
 pub enum ScanEvent {
-    Progress { files_scanned: u64, errors: u64 },
+    Progress {
+        files_scanned: u64,
+        dirs_scanned: u64,
+        errors: u64,
+        current_path: String,
+    },
     Complete,
 }
 
@@ -73,21 +78,29 @@ pub fn start_scan(
     let errors_counter = progress.errors.clone();
 
     let on_event_progress = on_event.clone();
+    let current_path = progress.current_path.clone();
+    let dirs_counter = progress.dirs_scanned.clone();
+    let scan_done = Arc::new(AtomicBool::new(false));
+    let done_flag = scan_done.clone();
 
     // Spawn progress reporter
     let files_for_progress = files_counter.clone();
+    let dirs_for_progress = dirs_counter.clone();
     let errors_for_progress = errors_counter.clone();
     let progress_handle = std::thread::spawn(move || {
         loop {
             std::thread::sleep(std::time::Duration::from_millis(100));
             let files = files_for_progress.load(Ordering::Relaxed);
+            let dirs = dirs_for_progress.load(Ordering::Relaxed);
             let errors = errors_for_progress.load(Ordering::Relaxed);
+            let cp = current_path.lock().unwrap().clone();
             let _ = on_event_progress.send(ScanEvent::Progress {
                 files_scanned: files,
+                dirs_scanned: dirs,
                 errors,
+                current_path: cp,
             });
-            // Break when the scan thread has dropped its Arc clone
-            if files > 0 && Arc::strong_count(&files_for_progress) <= 2 {
+            if done_flag.load(Ordering::Relaxed) {
                 break;
             }
         }
@@ -99,7 +112,9 @@ pub fn start_scan(
     std::thread::spawn(move || {
         let p = ScanProgress {
             files_scanned: files_counter,
+            dirs_scanned: dirs_counter,
             errors: errors_counter,
+            current_path: progress.current_path.clone(),
         };
 
         let root = {
@@ -135,7 +150,8 @@ pub fn start_scan(
             *result = Some(root);
         }
 
-        // Wait for progress reporter to finish
+        // Signal progress reporter to stop
+        scan_done.store(true, Ordering::Relaxed);
         let _ = progress_handle.join();
 
         // Send complete event
