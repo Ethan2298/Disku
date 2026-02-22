@@ -4,7 +4,7 @@
   import DrivePicker from "./lib/DrivePicker.svelte";
   import PathInput from "./lib/PathInput.svelte";
   import Scanning from "./lib/Scanning.svelte";
-  import Browser from "./lib/Browser.svelte";
+  import DirectoryView from "./lib/DirectoryView.svelte";
 
   function startDrag(e: MouseEvent) {
     if (e.buttons === 1) {
@@ -86,7 +86,7 @@
       onComplete={onScanComplete}
     />
   {:else if currentView === "browser"}
-    <Browser onQuit={onBackToStart} />
+    <DirectoryView onQuit={onBackToStart} />
   {/if}
 </main>
 
