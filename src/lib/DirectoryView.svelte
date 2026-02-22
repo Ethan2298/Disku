@@ -25,6 +25,8 @@
   // --- Column resize definitions ---
   const ICON_WIDTH = 28;
   const STORAGE_KEY = "disku-col-widths";
+  const ORDER_STORAGE_KEY = "disku-col-order";
+  const DRAG_THRESHOLD = 5;
   const COL_DEFS = [
     { key: "name", label: "Name", min: 80, defaultFrac: 0.3 },
     { key: "bar", label: "%", min: 60, defaultFrac: 0.4 },
@@ -33,14 +35,26 @@
   ];
 
   let colWidths: number[] = $state(COL_DEFS.map(() => 0));
+  let colOrder: number[] = $state([0, 1, 2, 3]);
+  let headerCellEls: (HTMLSpanElement | undefined)[] = $state([]);
+
   let resizing: {
-    colIndex: number;
+    leftIndex: number;
+    rightIndex: number;
     startX: number;
     startWidths: number[];
   } | null = $state(null);
 
+  let dragging: {
+    colDefIndex: number;
+    startX: number;
+    currentX: number;
+    headerRects: DOMRect[];
+    activated: boolean;
+  } | null = $state(null);
+
   let gridCols = $derived(
-    `${ICON_WIDTH}px ${colWidths.map((w) => w + "px").join(" ")}`,
+    `${ICON_WIDTH}px ${colOrder.map((ci) => colWidths[ci] + "px").join(" ")}`,
   );
 
   function getAvailableWidth(): number {
@@ -97,33 +111,118 @@
     colWidths = scaled;
   }
 
-  function onHandleMousedown(e: MouseEvent, colIndex: number) {
+  function onHandleMousedown(e: MouseEvent, visualHandleIndex: number) {
     e.preventDefault();
     resizing = {
-      colIndex,
+      leftIndex: colOrder[visualHandleIndex],
+      rightIndex: colOrder[visualHandleIndex + 1],
       startX: e.clientX,
       startWidths: [...colWidths],
     };
   }
 
   function onWindowMousemove(e: MouseEvent) {
+    if (dragging) {
+      onDragMousemove(e);
+      return;
+    }
     if (!resizing) return;
-    const { colIndex: i, startX, startWidths } = resizing;
+    const { leftIndex, rightIndex, startX, startWidths } = resizing;
     const delta = e.clientX - startX;
-    const sumPair = startWidths[i] + startWidths[i + 1];
+    const sumPair = startWidths[leftIndex] + startWidths[rightIndex];
     const newLeft = Math.min(
-      Math.max(startWidths[i] + delta, COL_DEFS[i].min),
-      sumPair - COL_DEFS[i + 1].min,
+      Math.max(startWidths[leftIndex] + delta, COL_DEFS[leftIndex].min),
+      sumPair - COL_DEFS[rightIndex].min,
     );
     const newRight = sumPair - newLeft;
-    colWidths[i] = newLeft;
-    colWidths[i + 1] = newRight;
+    colWidths[leftIndex] = newLeft;
+    colWidths[rightIndex] = newRight;
   }
 
   function onWindowMouseup() {
+    if (dragging) {
+      dragging = null;
+      saveColOrder();
+      return;
+    }
     if (!resizing) return;
     resizing = null;
     saveColWidths();
+  }
+
+  function onHeaderMousedown(e: MouseEvent, colDefIndex: number) {
+    e.preventDefault();
+    const rects = headerCellEls.map(
+      (el) => el?.getBoundingClientRect() ?? new DOMRect(),
+    );
+    dragging = {
+      colDefIndex,
+      startX: e.clientX,
+      currentX: e.clientX,
+      headerRects: rects,
+      activated: false,
+    };
+  }
+
+  function onDragMousemove(e: MouseEvent) {
+    if (!dragging) return;
+    dragging.currentX = e.clientX;
+
+    if (!dragging.activated) {
+      if (Math.abs(dragging.currentX - dragging.startX) < DRAG_THRESHOLD)
+        return;
+      dragging.activated = true;
+    }
+
+    const currentVisualPos = colOrder.indexOf(dragging.colDefIndex);
+    const dropTarget = computeDropTarget(e.clientX, dragging.headerRects);
+
+    if (dropTarget !== -1 && dropTarget !== currentVisualPos) {
+      const newOrder = [...colOrder];
+      newOrder.splice(currentVisualPos, 1);
+      newOrder.splice(dropTarget, 0, dragging.colDefIndex);
+      colOrder = newOrder;
+
+      requestAnimationFrame(() => {
+        if (dragging) {
+          dragging.headerRects = headerCellEls.map(
+            (el) => el?.getBoundingClientRect() ?? new DOMRect(),
+          );
+        }
+      });
+    }
+  }
+
+  function computeDropTarget(clientX: number, rects: DOMRect[]): number {
+    for (let i = 0; i < rects.length; i++) {
+      const rect = rects[i];
+      const midpoint = rect.left + rect.width / 2;
+      if (clientX < midpoint) return i;
+    }
+    return rects.length - 1;
+  }
+
+  function saveColOrder() {
+    localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(colOrder));
+  }
+
+  function initColOrder() {
+    try {
+      const stored = localStorage.getItem(ORDER_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (
+          Array.isArray(parsed) &&
+          parsed.length === COL_DEFS.length &&
+          parsed.every((v: unknown) => typeof v === "number") &&
+          [...parsed].sort().every((v, i) => v === i)
+        ) {
+          colOrder = parsed;
+          return;
+        }
+      }
+    } catch {}
+    colOrder = [0, 1, 2, 3];
   }
 
   // --- Existing state ---
@@ -149,6 +248,7 @@
 
   onMount(() => {
     loadView();
+    initColOrder();
     // Wait for DOM, then measure and init column widths
     requestAnimationFrame(() => {
       initColWidths();
@@ -183,7 +283,9 @@
     return () => ro.disconnect();
   });
 
-  let barEl: HTMLSpanElement | undefined = $state();
+  let barEl: HTMLSpanElement | undefined = $derived(
+    headerCellEls[colOrder.indexOf(1)],
+  );
   let barWidth = $state(20);
 
   function updateBarWidth() {
@@ -287,11 +389,11 @@
             : "name"}]
         </span>
       </div>
-      <div class="file-list-wrap" class:resizing={resizing !== null}>
+      <div class="file-list-wrap" class:resizing={resizing !== null} class:reordering={dragging?.activated}>
         {#each [0, 1, 2] as hi}
           <div
             class="resize-handle"
-            style:left="{ICON_WIDTH + colWidths.slice(0, hi + 1).reduce((a, b) => a + b, 0) - 2}px"
+            style:left="{ICON_WIDTH + colOrder.slice(0, hi + 1).reduce((sum, ci) => sum + colWidths[ci], 0) - 2}px"
             onmousedown={(e) => onHandleMousedown(e, hi)}
             role="separator"
             aria-orientation="vertical"
@@ -304,10 +406,18 @@
             style:grid-template-columns={gridCols}
           >
             <span class="col-icon"></span>
-            <span class="col-name">Name</span>
-            <span class="col-bar" bind:this={barEl}>%</span>
-            <span class="col-size">Size</span>
-            <span class="col-pct">%</span>
+            {#each colOrder as ci, vi}
+              <span
+                class="col-{COL_DEFS[ci].key}"
+                bind:this={headerCellEls[vi]}
+                class:drag-source={dragging?.activated && dragging.colDefIndex === ci}
+                onmousedown={(e) => onHeaderMousedown(e, ci)}
+                role="columnheader"
+                tabindex="-1"
+              >
+                {COL_DEFS[ci].label}
+              </span>
+            {/each}
           </div>
           {#each view.entries as entry, i}
             {@const pct =
@@ -331,10 +441,17 @@
               <span class="col-icon" class:dir={entry.is_dir}
                 >{entry.is_dir ? "+" : " "}</span
               >
-              <span class="col-name" class:dir={entry.is_dir}>{entry.name}</span>
-              <span class="col-bar">{makeBar(pct)}</span>
-              <span class="col-size">{formatSize(entry.size)}</span>
-              <span class="col-pct">{pct.toFixed(1)}%</span>
+              {#each colOrder as ci}
+                {#if COL_DEFS[ci].key === "name"}
+                  <span class="col-name" class:dir={entry.is_dir}>{entry.name}</span>
+                {:else if COL_DEFS[ci].key === "bar"}
+                  <span class="col-bar">{makeBar(pct)}</span>
+                {:else if COL_DEFS[ci].key === "size"}
+                  <span class="col-size">{formatSize(entry.size)}</span>
+                {:else if COL_DEFS[ci].key === "pct"}
+                  <span class="col-pct">{pct.toFixed(1)}%</span>
+                {/if}
+              {/each}
             </button>
           {/each}
         </div>
@@ -406,8 +523,26 @@
     min-height: 0;
   }
 
-  .file-list-wrap.resizing {
+  .file-list-wrap.resizing,
+  .file-list-wrap.reordering {
     user-select: none;
+  }
+
+  .file-list-wrap.reordering {
+    cursor: grabbing;
+  }
+
+  .grid-header > span:not(.col-icon) {
+    cursor: grab;
+  }
+
+  .file-list-wrap.reordering .grid-header > span {
+    cursor: grabbing;
+  }
+
+  .drag-source {
+    opacity: 0.5;
+    background: var(--bg-hover, rgba(255, 255, 255, 0.05));
   }
 
   .file-list {
