@@ -14,6 +14,7 @@
     $props();
 
   let recentPaths: string[] = $state([]);
+  let error: string | null = $state(null);
   const MAX_VISIBLE = 16;
 
   let spinnerFrame = $state(0);
@@ -60,6 +61,7 @@
 
     invoke("start_scan", { path, onEvent }).catch((e) => {
       console.error("Scan failed:", e);
+      error = String(e);
     });
 
     return () => {
@@ -80,10 +82,14 @@
           <span class="status active">scanning</span>
         {/if}
       </div>
-      <p class="detail">
-        {filesScanned.toLocaleString()} files &middot; {dirsScanned.toLocaleString()}
-        folders &middot; {path}
-      </p>
+      {#if error}
+        <p class="detail error">{error}</p>
+      {:else}
+        <p class="detail">
+          {filesScanned.toLocaleString()} files &middot; {dirsScanned.toLocaleString()}
+          folders &middot; {path}
+        </p>
+      {/if}
     </div>
     <div class="file-feed">
       {#each recentPaths as p, i}
@@ -159,6 +165,10 @@
     color: var(--text-secondary);
     font-size: 12px;
     padding-left: 24px;
+  }
+
+  .detail.error {
+    color: var(--color-error, #e06c75);
   }
 
   .file-feed {

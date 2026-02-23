@@ -1,6 +1,7 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
+  import { formatSize } from "./utils";
 
   interface Props {
     onQuit: () => void;
@@ -230,6 +231,7 @@
   let selectedIndex: number = $state(0);
   let sortBySize: boolean = $state(true);
   let view: DirectoryView | null = $state(null);
+  let error: string | null = $state(null);
   let listEl: HTMLDivElement | undefined = $state();
 
   async function loadView() {
@@ -243,6 +245,7 @@
       }
     } catch (e) {
       console.error("Failed to load view:", e);
+      error = String(e);
     }
   }
 
@@ -301,19 +304,6 @@
   function makeBar(pct: number): string {
     const filled = Math.round((pct / 100) * barWidth);
     return "█".repeat(filled) + "░".repeat(barWidth - filled);
-  }
-
-  function formatSize(bytes: number): string {
-    const KB = 1024;
-    const MB = KB * 1024;
-    const GB = MB * 1024;
-    const TB = GB * 1024;
-
-    if (bytes >= TB) return (bytes / TB).toFixed(1) + " TB";
-    if (bytes >= GB) return (bytes / GB).toFixed(1) + " GB";
-    if (bytes >= MB) return (bytes / MB).toFixed(1) + " MB";
-    if (bytes >= KB) return (bytes / KB).toFixed(1) + " KB";
-    return bytes + " B";
   }
 
   function scrollToSelected() {
@@ -469,6 +459,8 @@
         <span class="desc">start</span>
       </div>
     </div>
+  {:else if error}
+    <div class="loading error">{error}</div>
   {:else}
     <div class="loading">loading...</div>
   {/if}
@@ -672,5 +664,9 @@
 
   .loading {
     color: var(--text-secondary);
+  }
+
+  .loading.error {
+    color: var(--color-error, #e06c75);
   }
 </style>

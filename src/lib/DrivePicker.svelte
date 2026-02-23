@@ -1,6 +1,7 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { onMount } from "svelte";
+  import { formatSize } from "./utils";
 
   interface Props {
     onSelect: (path: string) => void;
@@ -18,29 +19,18 @@
   let drives: DriveInfo[] = $state([]);
   let selectedIndex: number = $state(0);
   let loading: boolean = $state(true);
+  let error: string | null = $state(null);
 
   onMount(async () => {
     try {
       drives = await invoke<DriveInfo[]>("get_drives");
     } catch (e) {
       console.error("Failed to get drives:", e);
+      error = String(e);
       drives = [];
     }
     loading = false;
   });
-
-  function formatSize(bytes: number): string {
-    const KB = 1024;
-    const MB = KB * 1024;
-    const GB = MB * 1024;
-    const TB = GB * 1024;
-
-    if (bytes >= TB) return (bytes / TB).toFixed(1) + " TB";
-    if (bytes >= GB) return (bytes / GB).toFixed(1) + " GB";
-    if (bytes >= MB) return (bytes / MB).toFixed(1) + " MB";
-    if (bytes >= KB) return (bytes / KB).toFixed(1) + " KB";
-    return bytes + " B";
-  }
 
   function handleKeydown(e: KeyboardEvent) {
     switch (e.key) {
@@ -75,6 +65,8 @@
     <div class="panel-content">
       {#if loading}
         <div class="loading">detecting volumes...</div>
+      {:else if error}
+        <div class="loading error">{error}</div>
       {:else if drives.length === 0}
         <div class="loading">no volumes found</div>
       {:else}
@@ -146,6 +138,10 @@
     padding: 16px;
     color: var(--text-secondary);
     text-align: center;
+  }
+
+  .loading.error {
+    color: var(--color-error, #e06c75);
   }
 
   .drive-list {
