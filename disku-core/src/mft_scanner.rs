@@ -1,15 +1,17 @@
-use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 
 use ntfs_reader::api::NtfsAttributeType;
 use ntfs_reader::mft::Mft;
 use ntfs_reader::volume::Volume;
+use rayon::prelude::*;
+use rustc_hash::FxHashMap;
 
 use crate::scanner::ScanProgress;
 use crate::tree::FileNode;
 
 const ROOT_RECORD: u64 = 5;
 const MAX_DEPTH: usize = 512;
+const PAR_THRESHOLD: usize = 16;
 
 struct MftEntry {
     name: String,
@@ -60,7 +62,7 @@ pub fn scan_mft(drive_letter: char, progress: &ScanProgress) -> Option<FileNode>
     });
 
     // Build parent -> children map
-    let mut children_map: HashMap<u64, Vec<usize>> = HashMap::new();
+    let mut children_map: FxHashMap<u64, Vec<usize>> = FxHashMap::default();
     for (ref_num, entry) in entries.iter().enumerate() {
         if let Some(e) = entry {
             if e.parent_ref != ref_num as u64 {
@@ -76,11 +78,10 @@ pub fn scan_mft(drive_letter: char, progress: &ScanProgress) -> Option<FileNode>
 
     let mut root = FileNode::new_dir(root_name.clone());
     if let Some(child_refs) = children_map.get(&ROOT_RECORD) {
-        for &child_ref in child_refs {
-            if let Some(child) = build_subtree(child_ref, &entries, &children_map, 0) {
-                root.children.push(child);
-            }
-        }
+        root.children = child_refs
+            .par_iter()
+            .filter_map(|&child_ref| build_subtree(child_ref, &entries, &children_map, 0))
+            .collect();
     }
     root.size = root.children.iter().map(|c| c.size).sum();
     root.name = root_name;
@@ -107,7 +108,7 @@ fn get_data_size(file: &ntfs_reader::file::NtfsFile) -> u64 {
 fn build_subtree(
     ref_num: usize,
     entries: &[Option<MftEntry>],
-    children_map: &HashMap<u64, Vec<usize>>,
+    children_map: &FxHashMap<u64, Vec<usize>>,
     depth: usize,
 ) -> Option<FileNode> {
     if depth >= MAX_DEPTH {
@@ -116,20 +117,34 @@ fn build_subtree(
 
     let entry = entries.get(ref_num)?.as_ref()?;
 
-    let mut children = Vec::new();
-    if entry.is_dir {
+    let children = if entry.is_dir {
         if let Some(child_refs) = children_map.get(&(ref_num as u64)) {
-            children.reserve(child_refs.len());
-            for &child_ref in child_refs {
-                if child_ref == ref_num {
-                    continue;
+            if child_refs.len() >= PAR_THRESHOLD {
+                child_refs
+                    .par_iter()
+                    .filter(|&&cr| cr != ref_num)
+                    .filter_map(|&cr| build_subtree(cr, entries, children_map, depth + 1))
+                    .collect()
+            } else {
+                let mut v = Vec::with_capacity(child_refs.len());
+                for &child_ref in child_refs {
+                    if child_ref == ref_num {
+                        continue;
+                    }
+                    if let Some(child) =
+                        build_subtree(child_ref, entries, children_map, depth + 1)
+                    {
+                        v.push(child);
+                    }
                 }
-                if let Some(child) = build_subtree(child_ref, entries, children_map, depth + 1) {
-                    children.push(child);
-                }
+                v
             }
+        } else {
+            Vec::new()
         }
-    }
+    } else {
+        Vec::new()
+    };
 
     let size = if entry.is_dir {
         children.iter().map(|c| c.size).sum()

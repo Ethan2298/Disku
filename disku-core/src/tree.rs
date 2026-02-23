@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use rayon::prelude::*;
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct FileNode {
     pub name: String,
@@ -29,17 +31,19 @@ impl FileNode {
     }
 
     pub fn sort_by_size(&mut self) {
-        self.children.sort_unstable_by(|a, b| b.size.cmp(&a.size));
-        for child in &mut self.children {
-            child.sort_by_size();
-        }
+        self.children
+            .par_sort_unstable_by(|a, b| b.size.cmp(&a.size));
+        self.children
+            .par_iter_mut()
+            .for_each(|child| child.sort_by_size());
     }
 
     pub fn sort_by_name(&mut self) {
-        self.children.sort_unstable_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-        for child in &mut self.children {
-            child.sort_by_name();
-        }
+        self.children
+            .par_sort_unstable_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        self.children
+            .par_iter_mut()
+            .for_each(|child| child.sort_by_name());
     }
 }
 
