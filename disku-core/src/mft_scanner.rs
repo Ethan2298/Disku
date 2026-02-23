@@ -76,9 +76,9 @@ pub fn scan_mft(drive_letter: char, progress: &ScanProgress) -> Option<FileNode>
     let mut root = FileNode::new_dir(root_name.clone());
     if let Some(child_refs) = children_map.get(&ROOT_RECORD) {
         for &child_ref in child_refs {
-            root.children.push(build_subtree(
-                child_ref, &entries, &children_map,
-            ));
+            if let Some(child) = build_subtree(child_ref, &entries, &children_map) {
+                root.children.push(child);
+            }
         }
     }
     root.size = root.children.iter().map(|c| c.size).sum();
@@ -107,8 +107,8 @@ fn build_subtree(
     ref_num: usize,
     entries: &[Option<MftEntry>],
     children_map: &HashMap<u64, Vec<usize>>,
-) -> FileNode {
-    let entry = entries[ref_num].as_ref().unwrap();
+) -> Option<FileNode> {
+    let entry = entries.get(ref_num)?.as_ref()?;
 
     let mut children = Vec::new();
     if entry.is_dir {
@@ -118,8 +118,8 @@ fn build_subtree(
                 if child_ref == ref_num {
                     continue;
                 }
-                if entries.get(child_ref).and_then(|e| e.as_ref()).is_some() {
-                    children.push(build_subtree(child_ref, entries, children_map));
+                if let Some(child) = build_subtree(child_ref, entries, children_map) {
+                    children.push(child);
                 }
             }
         }
@@ -131,10 +131,10 @@ fn build_subtree(
         entry.size
     };
 
-    FileNode {
+    Some(FileNode {
         name: entry.name.clone(),
         size,
         is_dir: entry.is_dir,
         children,
-    }
+    })
 }
