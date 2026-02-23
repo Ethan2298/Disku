@@ -295,7 +295,14 @@ fn read_dir_fallback(dir_path: &Path, progress: &ScanProgress, root_dev: Option<
     let mut file_nodes: Vec<FileNode> = Vec::new();
     let mut dir_entries: Vec<(String, std::path::PathBuf)> = Vec::new();
 
-    for entry in entries.flatten() {
+    for entry in entries {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(_) => {
+                progress.errors.fetch_add(1, Ordering::Relaxed);
+                continue;
+            }
+        };
         let meta = match entry.metadata() {
             Ok(m) => m,
             Err(_) => {

@@ -103,7 +103,8 @@ pub fn detect_drives() -> Vec<DriveInfo> {
 
     // Enumerate /Volumes
     if let Ok(entries) = std::fs::read_dir("/Volumes") {
-        for entry in entries.flatten() {
+        for entry in entries {
+            let Ok(entry) = entry else { continue };
             let path = entry.path();
             let path_str = path.to_string_lossy().to_string();
 
