@@ -15,7 +15,6 @@ const ATTR_CMN_NAME: u32 = 0x00000001;
 const ATTR_CMN_OBJTYPE: u32 = 0x00000008;
 const ATTR_CMN_ERROR: u32 = 0x20000000;
 const ATTR_FILE_DATALENGTH: u32 = 0x00000200;
-const VREG: u32 = 1; // regular file
 const VDIR: u32 = 2; // directory
 
 const BULK_BUF_SIZE: usize = 256 * 1024; // 256 KB buffer
@@ -31,9 +30,13 @@ struct AttrList {
     forkattr: u32,
 }
 
-#[repr(C)]
-struct AttrBuf {
-    length: u32,
+/// RAII wrapper for a file descriptor that closes on drop.
+struct OwnedFd(libc::c_int);
+
+impl Drop for OwnedFd {
+    fn drop(&mut self) {
+        unsafe { libc::close(self.0) };
+    }
 }
 
 extern "C" {
@@ -129,10 +132,11 @@ fn scan_dir_recursive(dir_path: &Path, progress: &ScanProgress, root_dev: Option
 /// Returns None if the syscall is unavailable or fails.
 fn read_dir_bulk(dir_path: &Path) -> Option<Vec<BulkEntry>> {
     let c_path = CString::new(dir_path.as_os_str().as_bytes()).ok()?;
-    let fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDONLY | libc::O_DIRECTORY) };
-    if fd < 0 {
+    let raw_fd = unsafe { libc::open(c_path.as_ptr(), libc::O_RDONLY | libc::O_DIRECTORY) };
+    if raw_fd < 0 {
         return None;
     }
+    let fd = OwnedFd(raw_fd);
 
     let alist = AttrList {
         bitmapcount: ATTR_BIT_MAP_COUNT,
@@ -150,7 +154,7 @@ fn read_dir_bulk(dir_path: &Path) -> Option<Vec<BulkEntry>> {
     loop {
         let count = unsafe {
             getattrlistbulk(
-                fd,
+                fd.0,
                 &alist,
                 buf.as_mut_ptr() as *mut libc::c_void,
                 BULK_BUF_SIZE,
@@ -159,12 +163,9 @@ fn read_dir_bulk(dir_path: &Path) -> Option<Vec<BulkEntry>> {
         };
 
         if count < 0 {
-            // syscall error — close fd and bail
-            unsafe { libc::close(fd) };
             return None;
         }
         if count == 0 {
-            // no more entries
             break;
         }
 
@@ -174,8 +175,10 @@ fn read_dir_bulk(dir_path: &Path) -> Option<Vec<BulkEntry>> {
                 break;
             }
 
-            let entry_length =
-                u32::from_ne_bytes(buf[offset..offset + 4].try_into().unwrap()) as usize;
+            let Ok(len_bytes) = buf[offset..offset + 4].try_into() else {
+                break;
+            };
+            let entry_length = u32::from_ne_bytes(len_bytes) as usize;
 
             if entry_length == 0 || offset + entry_length > BULK_BUF_SIZE {
                 break;
@@ -189,7 +192,6 @@ fn read_dir_bulk(dir_path: &Path) -> Option<Vec<BulkEntry>> {
         }
     }
 
-    unsafe { libc::close(fd) };
     Some(results)
 }
 
@@ -230,7 +232,9 @@ fn parse_bulk_entry(data: &[u8]) -> Option<BulkEntry> {
     }
     let name_ref_offset = i32::from_ne_bytes(data[pos..pos + 4].try_into().ok()?);
     let _name_ref_length = u32::from_ne_bytes(data[pos + 4..pos + 8].try_into().ok()?);
-    let name_data_start = (pos as i32 + name_ref_offset) as usize;
+    let name_data_start = usize::try_from(
+        (pos as i64).checked_add(name_ref_offset as i64)?
+    ).ok()?;
     pos += 8;
 
     let name = if name_data_start < data.len() {
