@@ -1,7 +1,7 @@
 :root {
   /* Warp "Nights" theme — 65% opacity for blur-through */
-  --bg-primary: rgba(10, 14, 18, 0.65);
-  --bg-secondary: rgba(16, 24, 32, 0.65);
+  --bg-primary: rgba(6, 8, 12, 0.75);
+  --bg-secondary: rgba(10, 16, 22, 0.75);
   --bg-hover: rgba(26, 36, 48, 0.5);
   --bg-selected: rgba(30, 46, 62, 0.55);
 
@@ -14,7 +14,7 @@
   --color-accent: #4a8a9a;
   --color-accent-dim: #3a6a7a;
   --color-drive: #c8b860;
-  --color-border: rgba(42, 52, 64, 0.6);
+  --color-border: rgb(82, 100, 120);
   --color-size: #c0c0c0;
   --color-pct: #505050;
 
@@ -64,4 +64,21 @@ body {
   user-select: none;
   -webkit-user-select: none;
   border-radius: 10px;
+}
+
+.platform-windows ::-webkit-scrollbar {
+  width: 8px;
+}
+
+.platform-windows ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.platform-windows ::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 0;
+}
+
+.platform-windows ::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
