@@ -94,8 +94,8 @@ fn scan_dir_recursive(dir_path: &Path, progress: &ScanProgress, root_dev: Option
         }
     };
 
-    let mut file_nodes: Vec<FileNode> = Vec::new();
-    let mut dir_entries: Vec<(String, std::path::PathBuf)> = Vec::new();
+    let mut file_nodes: Vec<FileNode> = Vec::with_capacity(entries.len());
+    let mut dir_entries: Vec<(String, std::path::PathBuf)> = Vec::with_capacity(entries.len() / 8);
 
     for entry in entries {
         if entry.is_dir {
@@ -154,7 +154,7 @@ fn read_dir_bulk(dir_path: &Path) -> Option<Vec<BulkEntry>> {
     };
 
     let mut buf = vec![0u8; BULK_BUF_SIZE];
-    let mut results = Vec::new();
+    let mut results = Vec::with_capacity(256);
 
     loop {
         let count = unsafe {
