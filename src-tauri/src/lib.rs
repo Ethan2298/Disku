@@ -9,18 +9,19 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(AppState::default())
         .setup(|app| {
-            let window = app.get_webview_window("main").unwrap();
+            let Some(window) = app.get_webview_window("main") else {
+                return Ok(());
+            };
 
             #[cfg(target_os = "macos")]
             {
                 use window_vibrancy::{NSVisualEffectMaterial, NSVisualEffectState};
-                window_vibrancy::apply_vibrancy(
+                let _ = window_vibrancy::apply_vibrancy(
                     &window,
                     NSVisualEffectMaterial::HudWindow,
                     Some(NSVisualEffectState::Active),
                     Some(10.0),
-                )
-                .expect("Failed to apply vibrancy");
+                );
             }
 
             #[cfg(target_os = "windows")]

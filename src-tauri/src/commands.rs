@@ -68,7 +68,7 @@ pub fn start_scan(
 ) {
     // Clear previous result
     {
-        let mut result = state.scan_result.lock().unwrap();
+        let mut result = state.scan_result.lock().unwrap_or_else(|e| e.into_inner());
         *result = None;
     }
 
@@ -93,7 +93,7 @@ pub fn start_scan(
             let files = files_for_progress.load(Ordering::Relaxed);
             let dirs = dirs_for_progress.load(Ordering::Relaxed);
             let errors = errors_for_progress.load(Ordering::Relaxed);
-            let cp = current_path.lock().unwrap().clone();
+            let cp = current_path.lock().unwrap_or_else(|e| e.into_inner()).clone();
             let _ = on_event_progress.send(ScanEvent::Progress {
                 files_scanned: files,
                 dirs_scanned: dirs,
@@ -122,7 +122,9 @@ pub fn start_scan(
             {
                 let path_str = scan_path.to_string_lossy();
                 if path_str.len() >= 2 && path_str.as_bytes()[1] == b':' {
-                    let drive_letter = path_str.chars().next().unwrap();
+                    let Some(drive_letter) = path_str.chars().next() else {
+                        return disku_core::scanner::scan(&scan_path, &p);
+                    };
                     if let Some(root) = disku_core::mft_scanner::scan_mft(drive_letter, &p) {
                         root
                     } else {
@@ -146,7 +148,7 @@ pub fn start_scan(
 
         // Store result
         {
-            let mut result = scan_result.lock().unwrap();
+            let mut result = scan_result.lock().unwrap_or_else(|e| e.into_inner());
             *result = Some(root);
         }
 
@@ -165,7 +167,7 @@ pub fn get_directory_view(
     sort_by_size: bool,
     state: State<'_, AppState>,
 ) -> Option<DirectoryView> {
-    let mut result = state.scan_result.lock().unwrap();
+    let mut result = state.scan_result.lock().unwrap_or_else(|e| e.into_inner());
     let root = result.as_mut()?;
 
     // Apply sort
