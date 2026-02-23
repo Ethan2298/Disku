@@ -105,7 +105,7 @@
   }
 
   .panel {
-    border: 1px solid var(--color-border);
+    border: 2px solid var(--color-border);
     width: 60%;
     min-width: 400px;
     max-width: 700px;
@@ -117,20 +117,20 @@
   .panel-title {
     padding: 4px 8px;
     color: var(--text-secondary);
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 2px solid var(--color-border);
     font-size: 12px;
   }
 
   .panel-content {
     flex: 1;
     overflow-y: auto;
-    padding: 4px 0;
+    padding: 0;
   }
 
   .panel-footer {
     padding: 4px 8px;
     color: var(--text-muted);
-    border-top: 1px solid var(--color-border);
+    border-top: 2px solid var(--color-border);
     font-size: 12px;
   }
 
@@ -156,6 +156,7 @@
     padding: 6px 12px;
     background: none;
     border: none;
+    border-bottom: 1px solid var(--color-border);
     cursor: pointer;
     font-family: inherit;
     font-size: 13px;

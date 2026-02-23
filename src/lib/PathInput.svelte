@@ -84,7 +84,7 @@
   }
 
   .panel {
-    border: 1px solid var(--color-border);
+    border: 2px solid var(--color-border);
     width: 50%;
     min-width: 350px;
     max-width: 600px;
@@ -95,7 +95,7 @@
   .panel-title {
     padding: 4px 8px;
     color: var(--text-secondary);
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 2px solid var(--color-border);
     font-size: 12px;
   }
 
@@ -109,7 +109,7 @@
   .panel-footer {
     padding: 4px 8px;
     color: var(--text-muted);
-    border-top: 1px solid var(--color-border);
+    border-top: 2px solid var(--color-border);
     font-size: 12px;
   }
 

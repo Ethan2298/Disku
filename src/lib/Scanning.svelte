@@ -111,7 +111,7 @@
   }
 
   .panel {
-    border: 1px solid var(--color-border);
+    border: 2px solid var(--color-border);
     width: 80%;
     min-width: 360px;
     max-width: 700px;
@@ -123,7 +123,7 @@
   .panel-title {
     padding: 4px 8px;
     color: var(--text-secondary);
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 2px solid var(--color-border);
     font-size: 12px;
   }
 
@@ -132,7 +132,7 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 2px solid var(--color-border);
   }
 
   .status-row {

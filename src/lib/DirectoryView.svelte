@@ -387,7 +387,7 @@
         {#each [0, 1, 2] as hi}
           <div
             class="resize-handle"
-            style:left="{colOrder.slice(0, hi + 1).reduce((sum, ci) => sum + colWidths[ci], 0) - 2}px"
+            style:left="{colOrder.slice(0, hi + 1).reduce((sum, ci) => sum + colWidths[ci], 0) - 6}px"
             onmousedown={(e) => onHandleMousedown(e, hi)}
             role="separator"
             aria-orientation="vertical"
@@ -477,7 +477,7 @@
   }
 
   .panel {
-    border: 1px solid var(--color-border);
+    border: 2px solid var(--color-border);
     width: 100%;
     height: 100%;
     display: flex;
@@ -490,7 +490,7 @@
     align-items: center;
     padding: 4px 8px;
     color: var(--text-secondary);
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 2px solid var(--color-border);
     font-size: 12px;
     flex-shrink: 0;
   }
@@ -562,7 +562,7 @@
     background: var(--bg-primary, #1e1e1e);
     font-size: 11px;
     color: var(--text-muted);
-    border-bottom: 1px solid var(--color-border);
+    border-bottom: 2px solid var(--color-border);
     z-index: 1;
   }
 
@@ -579,14 +579,26 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    width: 5px;
+    width: 12px;
     cursor: col-resize;
     z-index: 3;
   }
 
-  .resize-handle:hover,
-  .file-list-wrap.resizing > .resize-handle {
-    background: color-mix(in srgb, var(--color-accent) 30%, transparent);
+  .resize-handle::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 5px;
+    width: 2px;
+    transition: opacity 0.15s;
+    opacity: 0;
+    background: var(--color-accent);
+  }
+
+  .resize-handle:hover::after,
+  .file-list-wrap.resizing > .resize-handle::after {
+    opacity: 0.5;
   }
 
   .entry {
@@ -648,7 +660,7 @@
     align-items: center;
     gap: 4px;
     padding: 4px 8px;
-    border-top: 1px solid var(--color-border);
+    border-top: 2px solid var(--color-border);
     font-size: 12px;
     flex-shrink: 0;
   }
