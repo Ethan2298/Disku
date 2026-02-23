@@ -5,6 +5,9 @@
   import PathInput from "./lib/PathInput.svelte";
   import Scanning from "./lib/Scanning.svelte";
   import DirectoryView from "./lib/DirectoryView.svelte";
+  import WindowControls from "./lib/WindowControls.svelte";
+
+  const isWindows = navigator.userAgent.includes("Windows");
 
   function startDrag(e: MouseEvent) {
     if (e.buttons === 1) {
@@ -68,7 +71,11 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="titlebar" onmousedown={startDrag}></div>
+<div class="titlebar" onmousedown={startDrag}>
+  {#if isWindows}
+    <WindowControls />
+  {/if}
+</div>
 
 <main>
   {#if currentView === "start"}
@@ -96,6 +103,9 @@
     width: 100%;
     flex-shrink: 0;
     -webkit-app-region: drag;
+    display: flex;
+    justify-content: flex-end;
+    align-items: stretch;
   }
 
   main {

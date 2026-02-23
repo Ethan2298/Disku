@@ -26,11 +26,40 @@ pub fn run() {
 
             #[cfg(target_os = "windows")]
             {
+                // Remove native title bar — custom window controls rendered by frontend.
+                let _ = window.set_decorations(false);
+
                 // Disable shadow to prevent green tint on transparent windows.
                 let _ = window.set_shadow(false);
 
                 // Acrylic background — same effect Warp uses on Windows.
-                let _ = window_vibrancy::apply_acrylic(&window, Some((10, 14, 18, 166)));
+                let _ = window_vibrancy::apply_acrylic(&window, Some((10, 14, 18, 245)));
+
+                // Round window corners (Windows 11+, silently ignored on 10).
+                use raw_window_handle::HasWindowHandle;
+                if let Ok(wh) = window.window_handle() {
+                    if let raw_window_handle::RawWindowHandle::Win32(handle) = wh.as_raw() {
+                        const DWMWA_WINDOW_CORNER_PREFERENCE: u32 = 33;
+                        const DWMWCP_ROUND: u32 = 2;
+                        #[link(name = "dwmapi")]
+                        extern "system" {
+                            fn DwmSetWindowAttribute(
+                                hwnd: isize,
+                                attr: u32,
+                                value: *const u32,
+                                size: u32,
+                            ) -> i32;
+                        }
+                        unsafe {
+                            DwmSetWindowAttribute(
+                                handle.hwnd.get(),
+                                DWMWA_WINDOW_CORNER_PREFERENCE,
+                                &DWMWCP_ROUND,
+                                std::mem::size_of::<u32>() as u32,
+                            );
+                        }
+                    }
+                }
             }
 
             Ok(())

@@ -875,6 +875,7 @@ name = "disku-gui"
 version = "0.1.0"
 dependencies = [
  "disku-core",
+ "raw-window-handle",
  "serde",
  "serde_json",
  "tauri",
