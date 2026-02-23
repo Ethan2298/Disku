@@ -122,8 +122,9 @@ pub fn start_scan(
             {
                 let path_str = scan_path.to_string_lossy();
                 if path_str.len() >= 2 && path_str.as_bytes()[1] == b':' {
-                    let Some(drive_letter) = path_str.chars().next() else {
-                        return disku_core::scanner::scan(&scan_path, &p);
+                    let drive_letter = match path_str.chars().next() {
+                        Some(c) => c,
+                        None => return,
                     };
                     if let Some(root) = disku_core::mft_scanner::scan_mft(drive_letter, &p) {
                         root
