@@ -13,6 +13,8 @@
 //!   --path PATH          Directory to scan (default: $HOME)
 //!   --warmup             Run one warmup pass before measuring
 
+use disku_bench::bench_utils::*;
+
 #[cfg(not(target_os = "macos"))]
 fn main() {
     eprintln!("error: this benchmark requires macOS (getattrlistbulk)");
@@ -484,44 +486,6 @@ fn print_summary(label: &str, times: &[f64]) {
         "{:<14} {:>7.3}s {:>7.3}s {:>7.3}s",
         label, min, mean, max
     );
-}
-
-#[cfg(target_os = "macos")]
-fn fmin(v: &[f64]) -> f64 {
-    v.iter().cloned().fold(f64::INFINITY, f64::min)
-}
-
-#[cfg(target_os = "macos")]
-fn fmax(v: &[f64]) -> f64 {
-    v.iter().cloned().fold(f64::NEG_INFINITY, f64::max)
-}
-
-#[cfg(target_os = "macos")]
-fn get_peak_rss() -> Option<u64> {
-    let mut usage: libc::rusage = unsafe { std::mem::zeroed() };
-    let ret = unsafe { libc::getrusage(libc::RUSAGE_SELF, &mut usage) };
-    if ret == 0 {
-        Some(usage.ru_maxrss as u64)
-    } else {
-        None
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn format_bytes(bytes: u64) -> String {
-    const KB: u64 = 1024;
-    const MB: u64 = 1024 * KB;
-    const GB: u64 = 1024 * MB;
-
-    if bytes >= GB {
-        format!("{:.2} GB", bytes as f64 / GB as f64)
-    } else if bytes >= MB {
-        format!("{:.2} MB", bytes as f64 / MB as f64)
-    } else if bytes >= KB {
-        format!("{:.2} KB", bytes as f64 / KB as f64)
-    } else {
-        format!("{} B", bytes)
-    }
 }
 
 // ---------------------------------------------------------------------------

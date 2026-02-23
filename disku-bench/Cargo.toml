@@ -3,6 +3,10 @@ name = "disku-bench"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "disku_bench"
+path = "src/lib.rs"
+
 [[bin]]
 name = "bench_scan"
 path = "src/main.rs"
