@@ -9,6 +9,7 @@ use crate::scanner::ScanProgress;
 use crate::tree::FileNode;
 
 const ROOT_RECORD: u64 = 5;
+const MAX_DEPTH: usize = 512;
 
 struct MftEntry {
     name: String,
@@ -76,7 +77,7 @@ pub fn scan_mft(drive_letter: char, progress: &ScanProgress) -> Option<FileNode>
     let mut root = FileNode::new_dir(root_name.clone());
     if let Some(child_refs) = children_map.get(&ROOT_RECORD) {
         for &child_ref in child_refs {
-            if let Some(child) = build_subtree(child_ref, &entries, &children_map) {
+            if let Some(child) = build_subtree(child_ref, &entries, &children_map, 0) {
                 root.children.push(child);
             }
         }
@@ -107,7 +108,12 @@ fn build_subtree(
     ref_num: usize,
     entries: &[Option<MftEntry>],
     children_map: &HashMap<u64, Vec<usize>>,
+    depth: usize,
 ) -> Option<FileNode> {
+    if depth >= MAX_DEPTH {
+        return None;
+    }
+
     let entry = entries.get(ref_num)?.as_ref()?;
 
     let mut children = Vec::new();
@@ -118,7 +124,7 @@ fn build_subtree(
                 if child_ref == ref_num {
                     continue;
                 }
-                if let Some(child) = build_subtree(child_ref, entries, children_map) {
+                if let Some(child) = build_subtree(child_ref, entries, children_map, depth + 1) {
                     children.push(child);
                 }
             }

@@ -18,6 +18,7 @@ const ATTR_FILE_DATALENGTH: u32 = 0x00000200;
 const VDIR: u32 = 2; // directory
 
 const BULK_BUF_SIZE: usize = 256 * 1024; // 256 KB buffer
+const MAX_DEPTH: usize = 512;
 
 #[repr(C, packed(4))]
 struct AttrList {
@@ -69,7 +70,7 @@ pub fn scan_bulk(root: &Path, progress: &ScanProgress) -> FileNode {
         .unwrap_or_else(|| root.to_string_lossy().to_string());
 
     let root_dev = get_dev(root);
-    let children = scan_dir_recursive(root, progress, root_dev);
+    let children = scan_dir_recursive(root, progress, root_dev, 0);
     let mut node = FileNode::new_dir(root_name);
     node.children = children;
     node.size = node.children.iter().map(|c| c.size).sum();
@@ -77,7 +78,11 @@ pub fn scan_bulk(root: &Path, progress: &ScanProgress) -> FileNode {
     node
 }
 
-fn scan_dir_recursive(dir_path: &Path, progress: &ScanProgress, root_dev: Option<u64>) -> Vec<FileNode> {
+fn scan_dir_recursive(dir_path: &Path, progress: &ScanProgress, root_dev: Option<u64>, depth: usize) -> Vec<FileNode> {
+    if depth >= MAX_DEPTH {
+        return Vec::new();
+    }
+
     if let Ok(mut cp) = progress.current_path.try_lock() {
         *cp = dir_path.to_string_lossy().to_string();
     }
@@ -85,7 +90,7 @@ fn scan_dir_recursive(dir_path: &Path, progress: &ScanProgress, root_dev: Option
     let entries = match read_dir_bulk(dir_path) {
         Some(e) => e,
         None => {
-            return read_dir_fallback(dir_path, progress, root_dev);
+            return read_dir_fallback(dir_path, progress, root_dev, depth);
         }
     };
 
@@ -116,7 +121,7 @@ fn scan_dir_recursive(dir_path: &Path, progress: &ScanProgress, root_dev: Option
     let dir_nodes: Vec<FileNode> = dir_entries
         .into_par_iter()
         .map(|(name, child_path)| {
-            let children = scan_dir_recursive(&child_path, progress, root_dev);
+            let children = scan_dir_recursive(&child_path, progress, root_dev, depth + 1);
             let mut child_node = FileNode::new_dir(name);
             child_node.children = children;
             child_node.size = child_node.children.iter().map(|c| c.size).sum();
@@ -278,7 +283,7 @@ fn parse_bulk_entry(data: &[u8]) -> Option<BulkEntry> {
 }
 
 /// Simple readdir + stat fallback for a single directory when getattrlistbulk fails.
-fn read_dir_fallback(dir_path: &Path, progress: &ScanProgress, root_dev: Option<u64>) -> Vec<FileNode> {
+fn read_dir_fallback(dir_path: &Path, progress: &ScanProgress, root_dev: Option<u64>, depth: usize) -> Vec<FileNode> {
     let entries = match std::fs::read_dir(dir_path) {
         Ok(e) => e,
         Err(_) => {
@@ -319,7 +324,7 @@ fn read_dir_fallback(dir_path: &Path, progress: &ScanProgress, root_dev: Option<
     let dir_nodes: Vec<FileNode> = dir_entries
         .into_par_iter()
         .map(|(name, child_path)| {
-            let children = scan_dir_recursive(&child_path, progress, root_dev);
+            let children = scan_dir_recursive(&child_path, progress, root_dev, depth + 1);
             let mut child_node = FileNode::new_dir(name);
             child_node.children = children;
             child_node.size = child_node.children.iter().map(|c| c.size).sum();

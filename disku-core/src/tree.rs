@@ -43,6 +43,8 @@ impl FileNode {
     }
 }
 
+const MAX_DEPTH: usize = 512;
+
 /// Build a tree from a flat list of (path, is_dir, size) entries.
 /// Used by the jwalk fallback scanner.
 pub fn build_tree(root_path: &Path, entries: Vec<(PathBuf, bool, u64)>) -> FileNode {
@@ -67,8 +69,9 @@ pub fn build_tree(root_path: &Path, entries: Vec<(PathBuf, bool, u64)>) -> FileN
         node: &mut FileNode,
         node_path: &Path,
         dir_children: &HashMap<PathBuf, Vec<(PathBuf, bool, u64)>>,
+        depth: usize,
     ) {
-        if !node.is_dir {
+        if !node.is_dir || depth >= MAX_DEPTH {
             return;
         }
 
@@ -80,7 +83,7 @@ pub fn build_tree(root_path: &Path, entries: Vec<(PathBuf, bool, u64)>) -> FileN
                     .unwrap_or_else(|| path.to_string_lossy().to_string());
                 if *is_dir {
                     let mut child = FileNode::new_dir(name);
-                    build_recursive(&mut child, path, dir_children);
+                    build_recursive(&mut child, path, dir_children, depth + 1);
                     child.size = child.children.iter().map(|c| c.size).sum();
                     node.children.push(child);
                 } else {
@@ -92,7 +95,7 @@ pub fn build_tree(root_path: &Path, entries: Vec<(PathBuf, bool, u64)>) -> FileN
         node.size = node.children.iter().map(|c| c.size).sum();
     }
 
-    build_recursive(&mut root, root_path, &dir_children);
+    build_recursive(&mut root, root_path, &dir_children, 0);
     root.sort_by_size();
     root
 }
