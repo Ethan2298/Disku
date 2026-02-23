@@ -23,13 +23,13 @@
   }
 
   // --- Column resize definitions ---
-  const ICON_WIDTH = 28;
+
   const STORAGE_KEY = "disku-col-widths";
   const ORDER_STORAGE_KEY = "disku-col-order";
   const DRAG_THRESHOLD = 5;
   const COL_DEFS = [
     { key: "name", label: "Name", min: 80, defaultFrac: 0.3 },
-    { key: "bar", label: "%", min: 60, defaultFrac: 0.4 },
+    { key: "bar", label: "Bar", min: 60, defaultFrac: 0.4 },
     { key: "size", label: "Size", min: 50, defaultFrac: 0.18 },
     { key: "pct", label: "%", min: 40, defaultFrac: 0.12 },
   ];
@@ -54,12 +54,12 @@
   } | null = $state(null);
 
   let gridCols = $derived(
-    `${ICON_WIDTH}px ${colOrder.map((ci) => colWidths[ci] + "px").join(" ")}`,
+    colOrder.map((ci) => colWidths[ci] + "px").join(" "),
   );
 
   function getAvailableWidth(): number {
     if (!listEl) return 600;
-    return listEl.clientWidth - ICON_WIDTH;
+    return listEl.clientWidth;
   }
 
   function initColWidths() {
@@ -258,14 +258,14 @@
   // ResizeObserver to rescale columns when container resizes
   $effect(() => {
     if (!listEl) return;
-    const currentAvailable = listEl.clientWidth - ICON_WIDTH;
+    const currentAvailable = listEl.clientWidth;
     const currentTotal = colWidths.reduce((a, b) => a + b, 0);
     if (currentTotal > 0 && Math.abs(currentTotal - currentAvailable) > 1) {
       rescaleColWidths(currentAvailable);
     }
     let prevWidth = currentAvailable;
     const ro = new ResizeObserver(() => {
-      const newAvailable = listEl!.clientWidth - ICON_WIDTH;
+      const newAvailable = listEl!.clientWidth;
       if (Math.abs(newAvailable - prevWidth) > 1) {
         rescaleColWidths(newAvailable);
         prevWidth = newAvailable;
@@ -290,8 +290,12 @@
 
   function updateBarWidth() {
     if (!barEl) return;
-    const charWidth = 8; // approx monospace char width at 13px
-    barWidth = Math.max(1, Math.floor(barEl.clientWidth / charWidth));
+    const charWidth = 7;
+    const style = getComputedStyle(barEl);
+    const pl = parseFloat(style.paddingLeft) || 0;
+    const pr = parseFloat(style.paddingRight) || 0;
+    const inner = barEl.clientWidth - pl - pr;
+    barWidth = Math.max(1, Math.ceil(inner / charWidth));
   }
 
   function makeBar(pct: number): string {
@@ -393,7 +397,7 @@
         {#each [0, 1, 2] as hi}
           <div
             class="resize-handle"
-            style:left="{ICON_WIDTH + colOrder.slice(0, hi + 1).reduce((sum, ci) => sum + colWidths[ci], 0) - 2}px"
+            style:left="{colOrder.slice(0, hi + 1).reduce((sum, ci) => sum + colWidths[ci], 0) - 2}px"
             onmousedown={(e) => onHandleMousedown(e, hi)}
             role="separator"
             aria-orientation="vertical"
@@ -405,7 +409,6 @@
             class="grid-header"
             style:grid-template-columns={gridCols}
           >
-            <span class="col-icon"></span>
             {#each colOrder as ci, vi}
               <span
                 class="col-{COL_DEFS[ci].key}"
@@ -438,9 +441,6 @@
                 }
               }}
             >
-              <span class="col-icon" class:dir={entry.is_dir}
-                >{entry.is_dir ? "+" : " "}</span
-              >
               {#each colOrder as ci}
                 {#if COL_DEFS[ci].key === "name"}
                   <span class="col-name" class:dir={entry.is_dir}>{entry.name}</span>
@@ -532,8 +532,12 @@
     cursor: grabbing;
   }
 
-  .grid-header > span:not(.col-icon) {
+  .grid-header > span {
     cursor: grab;
+  }
+
+  .grid-header > .col-bar {
+    color: var(--color-size);
   }
 
   .file-list-wrap.reordering .grid-header > span {
@@ -617,20 +621,12 @@
     font-weight: bold;
   }
 
-  .col-icon {
-    justify-content: center;
-    color: var(--text-muted);
-  }
-
-  .col-icon.dir {
-    color: var(--color-dir);
-  }
-
   .col-bar {
     overflow: hidden;
     white-space: nowrap;
     color: var(--color-accent, #5899f0);
     letter-spacing: -1px;
+    padding: 2px 10px !important;
   }
 
   .col-name {
@@ -652,7 +648,7 @@
 
   .col-pct {
     justify-content: flex-end;
-    color: var(--color-pct);
+    color: var(--color-size);
   }
 
   .panel-footer {
