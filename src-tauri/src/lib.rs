@@ -26,6 +26,22 @@ pub fn run() {
 
             #[cfg(target_os = "windows")]
             {
+                // Set window icon for taskbar/title bar.
+                // Try resource dir (bundled app), then fall back to relative path (dev mode).
+                let icon_path = app
+                    .path()
+                    .resource_dir()
+                    .map(|d| d.join("icons/128x128.png"))
+                    .ok()
+                    .filter(|p| p.exists())
+                    .unwrap_or_else(|| {
+                        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                            .join("icons/128x128.png")
+                    });
+                if let Ok(icon) = tauri::image::Image::from_path(&icon_path) {
+                    let _ = window.set_icon(icon);
+                }
+
                 // Remove native title bar — custom window controls rendered by frontend.
                 let _ = window.set_decorations(false);
 
@@ -33,7 +49,7 @@ pub fn run() {
                 let _ = window.set_shadow(false);
 
                 // Acrylic background — same effect Warp uses on Windows.
-                let _ = window_vibrancy::apply_acrylic(&window, Some((10, 14, 18, 245)));
+                let _ = window_vibrancy::apply_acrylic(&window, Some((6, 8, 12, 250)));
 
                 // Round window corners (Windows 11+, silently ignored on 10).
                 use raw_window_handle::HasWindowHandle;
@@ -69,6 +85,8 @@ pub fn run() {
             commands::start_scan,
             commands::get_directory_view,
             commands::validate_path,
+            commands::delete_entries,
+            commands::delete_entries_by_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

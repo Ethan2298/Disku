@@ -5,10 +5,10 @@
 
   interface Props {
     onSelect: (path: string) => void;
-    onBack: () => void;
+    onScanDirectory: () => void;
   }
 
-  let { onSelect, onBack }: Props = $props();
+  let { onSelect, onScanDirectory }: Props = $props();
 
   interface DriveInfo {
     path: string;
@@ -17,7 +17,6 @@
   }
 
   let drives: DriveInfo[] = $state([]);
-  let selectedIndex: number = $state(0);
   let loading: boolean = $state(true);
   let error: string | null = $state(null);
 
@@ -31,33 +30,7 @@
     }
     loading = false;
   });
-
-  function handleKeydown(e: KeyboardEvent) {
-    switch (e.key) {
-      case "ArrowUp":
-      case "k":
-        e.preventDefault();
-        if (selectedIndex > 0) selectedIndex--;
-        break;
-      case "ArrowDown":
-      case "j":
-        e.preventDefault();
-        if (selectedIndex < drives.length - 1) selectedIndex++;
-        break;
-      case "Enter":
-        e.preventDefault();
-        if (drives.length > 0) onSelect(drives[selectedIndex].path);
-        break;
-      case "q":
-      case "Escape":
-        e.preventDefault();
-        onBack();
-        break;
-    }
-  }
 </script>
-
-<svelte:window onkeydown={handleKeydown} />
 
 <div class="drive-picker">
   <div class="panel">
@@ -71,14 +44,12 @@
         <div class="loading">no volumes found</div>
       {:else}
         <div class="drive-list">
-          {#each drives as drive, i}
+          {#each drives as drive}
             {@const used = drive.total - drive.free}
             {@const pct =
               drive.total > 0 ? ((used / drive.total) * 100).toFixed(1) : "0.0"}
             <button
               class="drive-item"
-              class:selected={i === selectedIndex}
-              onmouseenter={() => (selectedIndex = i)}
               onclick={() => onSelect(drive.path)}
             >
               <span class="drive-path">{drive.path}</span>
@@ -91,7 +62,14 @@
         </div>
       {/if}
     </div>
-    <div class="panel-footer">enter scan · j/k nav · q back</div>
+    <div class="panel-footer">
+      <button class="back-btn" onclick={onScanDirectory}>
+        <svg width="12" height="12" viewBox="0 0 12 12">
+          <path d="M1 2h4l1.5 2H11v6H1V2z" stroke="currentColor" stroke-width="1" fill="none" stroke-linejoin="round"/>
+        </svg>
+        Scan Directory
+      </button>
+    </div>
   </div>
 </div>
 
@@ -128,10 +106,30 @@
   }
 
   .panel-footer {
+    display: flex;
+    justify-content: flex-end;
     padding: 4px 8px;
-    color: var(--text-muted);
     border-top: 2px solid var(--color-border);
     font-size: 12px;
+  }
+
+  .back-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: none;
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 11px;
+    padding: 3px 10px;
+    cursor: pointer;
+  }
+
+  .back-btn:hover {
+    color: var(--text-primary);
+    border-color: var(--text-secondary);
   }
 
   .loading {
@@ -164,7 +162,7 @@
     text-align: left;
   }
 
-  .drive-item.selected {
+  .drive-item:hover {
     background-color: var(--bg-selected);
     font-weight: bold;
   }

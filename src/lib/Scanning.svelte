@@ -72,7 +72,6 @@
 
 <div class="scanning">
   <div class="panel">
-    <div class="panel-title">disku</div>
     <div class="panel-content">
       <div class="status-row">
         <span class="spinner">{spinnerChars[spinnerFrame]}</span>
@@ -118,13 +117,6 @@
     display: flex;
     flex-direction: column;
     max-height: 70vh;
-  }
-
-  .panel-title {
-    padding: 4px 8px;
-    color: var(--text-secondary);
-    border-bottom: 2px solid var(--color-border);
-    font-size: 12px;
   }
 
   .panel-content {

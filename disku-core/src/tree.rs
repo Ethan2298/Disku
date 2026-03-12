@@ -45,6 +45,72 @@ impl FileNode {
             .par_iter_mut()
             .for_each(|child| child.sort_by_name());
     }
+
+    /// Remove a child by name and return its size so callers can adjust parent sizes.
+    /// Uses case-insensitive comparison for NTFS compatibility.
+    pub fn remove_child_by_name(&mut self, name: &str) -> Option<u64> {
+        if let Some(pos) = self
+            .children
+            .iter()
+            .position(|c| c.name.eq_ignore_ascii_case(name))
+        {
+            let removed = self.children.remove(pos);
+            let freed = removed.size;
+            self.size = self.size.saturating_sub(freed);
+            Some(freed)
+        } else {
+            None
+        }
+    }
+}
+
+/// Given an absolute path to a directory and the tree root, find the nav_path
+/// indices to navigate TO that directory. Returns empty vec if target is the root.
+///
+/// Uses case-insensitive comparison on Windows (NTFS is case-insensitive).
+pub fn find_nav_path(root: &FileNode, target: &std::path::Path) -> Option<Vec<usize>> {
+    let root_path = std::path::Path::new(&root.name);
+
+    // If target IS the root, return empty nav path
+    // Case-insensitive comparison for Windows paths
+    if root_path
+        .to_string_lossy()
+        .eq_ignore_ascii_case(&target.to_string_lossy())
+    {
+        return Some(Vec::new());
+    }
+
+    // Strip the root prefix to get the relative portion
+    let relative = target.strip_prefix(root_path).ok()?;
+    let components: Vec<&str> = relative
+        .components()
+        .filter_map(|c| {
+            if let std::path::Component::Normal(s) = c {
+                s.to_str()
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if components.is_empty() {
+        return Some(Vec::new());
+    }
+
+    let mut nav_path = Vec::new();
+    let mut node = root;
+
+    for &comp in &components {
+        // Case-insensitive match for NTFS compatibility
+        let idx = node
+            .children
+            .iter()
+            .position(|c| c.name.eq_ignore_ascii_case(comp))?;
+        nav_path.push(idx);
+        node = &node.children[idx];
+    }
+
+    Some(nav_path)
 }
 
 const MAX_DEPTH: usize = 512;
